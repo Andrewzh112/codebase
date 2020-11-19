@@ -9,7 +9,7 @@ from models import Generator, Discriminator
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-download', action="store_true", type=bool, default=False, help='If auto download CelebA dataset')
+parser.add_argument('-download', action="store_true", default=False, help='If auto download CelebA dataset')
 parser.add_argument('--img_channels', type=int, default=3, help='Numer of channels for images')
 parser.add_argument('--h_dim', type=float, default=64, help='model dimensions multiplier')
 parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')
