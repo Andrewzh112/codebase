@@ -2,11 +2,12 @@ from glob import glob
 import os
 from PIL import Image
 from torchvision import transforms
+from torchvision.datasets import CelebA
 import torch
 from torch.utils.data import Dataset, random_split, DataLoader
 
 
-class CelebA(Dataset):
+class celebA(Dataset):
     def __init__(self, args):
         self.celebs = glob(args.data_path + '/*' + args.img_ext)
         self.transforms = transforms.Compose([
@@ -26,5 +27,7 @@ class CelebA(Dataset):
 
 
 def get_loaders(args):
-    dataset = CelebA(args)
+    dataset = celebA(args)
+    if args.download:
+        dataset = CelebA('celebA', transform=dataset.transforms, download=True)
     return DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
