@@ -9,6 +9,7 @@ from models import Generator, Discriminator
 
 
 parser = argparse.ArgumentParser()
+parser.add_argument('-download', action="store_true", type=bool, default=False, help='If auto download CelebA dataset')
 parser.add_argument('--img_channels', type=int, default=3, help='Numer of channels for images')
 parser.add_argument('--h_dim', type=float, default=64, help='model dimensions multiplier')
 parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')
@@ -20,6 +21,7 @@ parser.add_argument('--lr', type=float, default=0.0002, help='Learning rate')
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+parser.add_argument('--save_every', type=int, default=10, help='Save interval')
 parser.add_argument('--sample_size', type=int, default=28, help='Numbers of images to log')
 parser.add_argument('--img_ext', type=str, default='jpg', help='The extension of the image files')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoint', help='Path to where model weights will be saved')
@@ -75,6 +77,13 @@ def train():
                 Train Disc loss: {sum(d_losses) / len(d_losses):.3f}, \
                 Train Gen Loss: {sum(g_losses) / len(g_losses):.3f}'
         )
+        if (epoch + 1) % opt.save_every == 0:
+            torch.save({
+                    'D': D.state_dict(),
+                    'G': G.state_dict(),
+                    'optimizer_D': optimizer_D.state_dict(),
+                    'optimizer_G': optimizer_G.state_dict()
+                }, f"{opt.checkpoint_dir}/cycleGAN_{epoch + 1}.pth")
 
 
 if __name__ == "__main__":
