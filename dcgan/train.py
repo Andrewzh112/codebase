@@ -59,7 +59,7 @@ def train():
             logits_fakes = D(fakes.detach())
             d_fake_loss = criterion(logits_fakes, torch.zeros_like(logits_fakes))
             logits_real = D(reals)
-            d_real_loss = criterion(logits_real, torch.ones_like(logits_fakes))
+            d_real_loss = criterion(logits_real, torch.ones_like(logits_real))
             d_loss = d_fake_loss + d_real_loss
             g_loss = criterion(D(fakes), torch.ones_like(logits_fakes))
             d_losses.append(d_loss.item())

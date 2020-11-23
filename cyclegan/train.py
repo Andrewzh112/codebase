@@ -27,6 +27,8 @@ parser.add_argument('--target_shape', type=int, default=224, help='Final image H
 parser.add_argument('--progress_interval', type=int, default=1, help='Save model and generated image every x epoch')
 parser.add_argument('--sample_batches', type=int, default=25, help='How many generated images to sample')
 parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
+parser.add_argument('--lambda_identity', type=float, default=0.1, help='Identity loss weight')
+parser.add_argument('--lambda_cycle', type=float, default=10., help='Cycle loss weight')
 parser.add_argument('--log_dir', type=str, default='logs', help='Path to where log files will be saved')
 parser.add_argument('--save_img_dir', type=str, default='save_images', help='Path to where generated images will be saved')
 parser.add_argument('--data_root', type=str, default='horse2zebra', help='Path to where image data is located')
@@ -153,7 +155,9 @@ if __name__ == "__main__":
             identity_A = G_BA(real_A)
             identity_B = G_AB(real_B)
             identity_loss = criterion_identity(identity_A, real_A) + criterion_identity(identity_B, real_B)
-            gen_loss = adversarial_loss + 10*cycle_loss + 0.1*cycle_loss
+
+            # weighted generator loss
+            gen_loss = adversarial_loss + args.lambda_identity*identity_loss + args.lambda_cycle*cycle_loss
             gen_AB_losses.append(gen_loss.item())
 
             disc_A_loss.backward(retain_graph=True)
