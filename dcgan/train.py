@@ -2,14 +2,16 @@ import argparse
 import torch
 import torchvision
 from tqdm import tqdm
+import os
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from data import get_loaders
+import faulthandler
 from models import Generator, Discriminator
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-download', action="store_true", type=bool, default=False, help='If auto download CelebA dataset')
+parser.add_argument('-download', action="store_true", default=False, help='If auto download CelebA dataset')
 parser.add_argument('--img_channels', type=int, default=3, help='Numer of channels for images')
 parser.add_argument('--h_dim', type=float, default=64, help='model dimensions multiplier')
 parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')
@@ -27,11 +29,17 @@ parser.add_argument('--img_ext', type=str, default='jpg', help='The extension of
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoint', help='Path to where model weights will be saved')
 parser.add_argument('--log_dir', type=str, default='logs', help='Path to where logs will be saved')
 opt = parser.parse_args()
+faulthandler.enable()
+writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
+
 
 
 def train():
+    if not os.path.isdir(opt.checkpoint_dir):
+        os.mkdir(opt.checkpoint_dir)
+    if not os.path.isdir(opt.log_dir):
+        os.mkdir(opt.log_dir)
     loader = get_loaders(opt)
-    writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
     G = Generator(opt)
     D = Discriminator(opt)
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr, betas=opt.betas)
