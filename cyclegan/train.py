@@ -104,6 +104,7 @@ if __name__ == "__main__":
             total=(args.n_epochs - args.starting_epoch)
         )
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    sampled_idx = get_random_ids(len(dataloader), args.sample_batches)
     for epoch in pbar:
         G_AB.train()
         G_BA.train()
@@ -111,34 +112,12 @@ if __name__ == "__main__":
         D_B.train()
         disc_A_losses, disc_B_losses, gen_AB_losses = [], [], []
         real_As, real_Bs, fake_As, fake_Bs = [], [], [], []
-        sampled_idx = get_random_ids(len(dataloader), args.sample_batches)
         for batch_idx, (real_A, real_B) in enumerate(dataloader):
             real_A = torch.nn.functional.interpolate(real_A, size=args.target_shape).to(device)
             real_B = torch.nn.functional.interpolate(real_B, size=args.target_shape).to(device)
 
-            ### Update discriminator A ###
-            with torch.no_grad():
-                fake_A = G_BA(real_B)
-                fake_A = pool_A.sample(fake_A)
-            fake_logits = D_A(fake_A)
-            disc_A_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
-            real_logits = D_A(real_A)
-            disc_A_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
-            disc_A_loss = (disc_A_fake_loss + disc_A_real_loss) / 2
-            disc_A_losses.append(disc_A_loss.item())
-
-            ### Update discriminator B ###
-            with torch.no_grad():
-                fake_B = G_AB(real_A)
-                fake_B = pool_B.sample(fake_B)
-            fake_logits = D_B(fake_B)
-            disc_B_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
-            real_logits = D_B(real_B)
-            disc_B_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
-            disc_B_loss = (disc_B_fake_loss + disc_B_real_loss) / 2
-            disc_B_losses.append(disc_B_loss.item())
-
             ### Update Generators ###
+            optimizer_G.zero_grad()
             ## Adversarial Loss ##
             fake_A = G_BA(real_B)
             fake_B = G_AB(real_A)
@@ -150,7 +129,7 @@ if __name__ == "__main__":
             cycle_A = G_BA(fake_B)
             cycle_B = G_AB(fake_A)
             cycle_loss = criterion_cycle(cycle_A, real_A) + criterion_cycle(cycle_B, real_B)
-            
+
             # identity loss ##
             identity_A = G_BA(real_A)
             identity_B = G_AB(real_B)
@@ -158,18 +137,41 @@ if __name__ == "__main__":
 
             # weighted generator loss
             gen_loss = adversarial_loss + args.lambda_identity*identity_loss + args.lambda_cycle*cycle_loss
-            gen_AB_losses.append(gen_loss.item())
 
-            disc_A_loss.backward(retain_graph=True)
-            optimizer_D_A.step()
-            disc_B_loss.backward(retain_graph=True)
-            optimizer_D_B.step()
+            # SGD
             gen_loss.backward()
             optimizer_G.step()
-            optimizer_D_A.zero_grad()
-            optimizer_D_B.zero_grad()
-            optimizer_G.zero_grad()
 
+            ### Update discriminator A ###
+            optimizer_D_A.zero_grad()
+            with torch.no_grad():
+                fake_A = G_BA(real_B)
+                fake_A = pool_A.sample(fake_A)
+            fake_logits = D_A(fake_A)
+            disc_A_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
+            real_logits = D_A(real_A)
+            disc_A_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
+            disc_A_loss = (disc_A_fake_loss + disc_A_real_loss) / 2
+            disc_A_losses.append(disc_A_loss.item())
+            disc_A_loss.backward()
+            optimizer_D_A.step()
+
+            ### Update discriminator B ###
+            optimizer_D_B.zero_grad()
+            with torch.no_grad():
+                fake_B = G_AB(real_A)
+                fake_B = pool_B.sample(fake_B)
+            fake_logits = D_B(fake_B)
+            disc_B_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
+            real_logits = D_B(real_B)
+            disc_B_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
+            disc_B_loss = (disc_B_fake_loss + disc_B_real_loss) / 2
+            disc_B_losses.append(disc_B_loss.item())
+            disc_B_loss.backward()
+            optimizer_D_B.step()
+
+            # log
+            gen_AB_losses.append(gen_loss.item())
             if batch_idx in sampled_idx:
                 real_As.append(real_A.detach().cpu())
                 real_Bs.append(real_B.detach().cpu())

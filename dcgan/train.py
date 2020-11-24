@@ -26,6 +26,7 @@ parser.add_argument('--save_every', type=int, default=10, help='Save interval')
 parser.add_argument('--sample_size', type=int, default=28, help='Numbers of images to log')
 parser.add_argument('--img_ext', type=str, default='jpg', help='The extension of the image files')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoint', help='Path to where model weights will be saved')
+parser.add_argument('--sample_dir', type=str, default='samples', help='Path to where generated samples will be saved')
 parser.add_argument('--log_dir', type=str, default='logs', help='Path to where logs will be saved')
 opt = parser.parse_args()
 writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
@@ -37,6 +38,8 @@ def train():
         os.mkdir(opt.checkpoint_dir)
     if not os.path.isdir(opt.log_dir):
         os.mkdir(opt.log_dir)
+    if not os.path.isdir(opt.sample_dir):
+        os.mkdir(opt.sample_dir)
     loader = get_loaders(opt)
     G = Generator(opt)
     D = Discriminator(opt)
@@ -78,7 +81,8 @@ def train():
         writer.add_scalars("Train Losses", {
             "Discriminator Loss": sum(d_losses) / len(d_losses),
             "Generator Loss": sum(g_losses) / len(g_losses)
-        })
+        }, global_step=epoch)
+        torchvision.utils.save_image(samples, f'{opt.sample_dir}/Epoch_{epoch}.png')
         tqdm.write(
             f'Epoch {epoch + 1}/{opt.n_epochs}, \
                 Train Disc loss: {sum(d_losses) / len(d_losses):.3f}, \
