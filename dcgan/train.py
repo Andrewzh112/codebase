@@ -65,12 +65,12 @@ def train():
             d_losses.append(d_loss.item())
             g_losses.append(g_loss.item())
 
-            d_loss.backward()
-            g_loss.backward()
+            optimizer_D.zero_grad
+            d_loss.backward(retain_graph=True)
             optimizer_D.step()
-            optimizer_G.step()
-            optimizer_D.zero_grad()
             optimizer_G.zero_grad()
+            g_loss.backward(retain_graph=False)
+            optimizer_G.step()
 
         with torch.no_grad():
             samples = G(fixed_z)
