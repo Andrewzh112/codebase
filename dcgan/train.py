@@ -59,16 +59,17 @@ def train():
             logits_real = D(reals)
             d_real_loss = criterion(logits_real, torch.ones_like(logits_real))
             d_loss = d_fake_loss + d_real_loss
-            g_loss = criterion(D(fakes), torch.ones_like(logits_fakes))
-            d_losses.append(d_loss.item())
-            g_losses.append(g_loss.item())
-
-            optimizer_D.zero_grad
+            optimizer_D.zero_grad()
             d_loss.backward(retain_graph=True)
             optimizer_D.step()
+
+            g_loss = criterion(D(fakes), torch.ones_like(logits_fakes))
             optimizer_G.zero_grad()
             g_loss.backward(retain_graph=False)
             optimizer_G.step()
+
+            d_losses.append(d_loss.item())
+            g_losses.append(g_loss.item())
 
         with torch.no_grad():
             samples = G(fixed_z)
