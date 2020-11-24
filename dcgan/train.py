@@ -6,7 +6,6 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from data import get_loaders
-import faulthandler
 from models import Generator, Discriminator
 
 
@@ -29,7 +28,6 @@ parser.add_argument('--img_ext', type=str, default='jpg', help='The extension of
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoint', help='Path to where model weights will be saved')
 parser.add_argument('--log_dir', type=str, default='logs', help='Path to where logs will be saved')
 opt = parser.parse_args()
-faulthandler.enable()
 writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
 
 
@@ -56,7 +54,7 @@ def train():
             reals = reals.to(device)
             z = torch.randn(reals.size(0), opt.z_dim).to(device)
             fakes = G(z)
-            logits_fakes = D(fakes.detach())
+            logits_fakes = D(fakes)
             d_fake_loss = criterion(logits_fakes, torch.zeros_like(logits_fakes))
             logits_real = D(reals)
             d_real_loss = criterion(logits_real, torch.ones_like(logits_real))
