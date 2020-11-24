@@ -5,10 +5,10 @@ class Discriminator(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.disc = nn.Sequential(
-            nn.Conv2d(args.img_channels, args.h_dim, 5, 2),
-            conv_bn_relu(args.h_dim, args.h_dim*2, 5, 2, 'lrelu', 'up'),
-            conv_bn_relu(args.h_dim*2, args.h_dim*4, 5, 2, 'lrelu', 'up'),
-            conv_bn_relu(args.h_dim*4, args.h_dim*8, 5, 2, 'lrelu', 'up'),
+            nn.Conv2d(args.img_channels, args.h_dim, 4, 2, 1),
+            conv_bn_relu(args.h_dim, args.h_dim*2, 4, 2, 'lrelu', 'up'),
+            conv_bn_relu(args.h_dim*2, args.h_dim*4, 4, 2, 'lrelu', 'up'),
+            conv_bn_relu(args.h_dim*4, args.h_dim*8, 4, 2, 'lrelu', 'up'),
             nn.Flatten(),
             nn.Linear(args.h_dim*8*4*4, 1)
         )
@@ -44,7 +44,7 @@ class Generator(nn.Module):
 
 def conv_bn_relu(in_channels, out_channels, kernel_size, stride, activation, mode):
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, kernel_size, stride, kernel_size//2, bias=False) \
+        nn.Conv2d(in_channels, out_channels, kernel_size, stride, 1, bias=False) \
             if mode == 'up' else \
                 nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, 1, bias=False),
         nn.BatchNorm2d(out_channels, momentum=0.9),
