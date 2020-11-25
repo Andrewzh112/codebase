@@ -68,13 +68,9 @@ if __name__ == "__main__":
         lr=args.lr_G,
         betas=args.betas
     )
-    optimizer_D_A = torch.optim.Adam(
-        D_A.parameters(),
-        lr=args.lr_D,
-        betas=args.betas
-    )
-    optimizer_D_B = torch.optim.Adam(
-        D_B.parameters(),
+    optimizer_D = torch.optim.Adam(
+        itertools.chain(D_A.parameters(),
+        D_B.parameters()),
         lr=args.lr_D,
         betas=args.betas
     )
@@ -83,12 +79,8 @@ if __name__ == "__main__":
         optimizer_G,
         lr_lambda=LambdaLR(args.n_epochs, args.starting_epoch, args.decay_epoch).step
     )
-    lr_scheduler_D_A = torch.optim.lr_scheduler.LambdaLR(
-        optimizer_D_A,
-        lr_lambda=LambdaLR(args.n_epochs, args.starting_epoch, args.decay_epoch).step
-    )
-    lr_scheduler_D_B = torch.optim.lr_scheduler.LambdaLR(
-        optimizer_D_B,
+    lr_scheduler_D = torch.optim.lr_scheduler.LambdaLR(
+        optimizer_D,
         lr_lambda=LambdaLR(args.n_epochs, args.starting_epoch, args.decay_epoch).step
     )
 
@@ -104,7 +96,6 @@ if __name__ == "__main__":
             total=(args.n_epochs - args.starting_epoch)
         )
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    sampled_idx = get_random_ids(len(dataloader), args.sample_batches)
     for epoch in pbar:
         G_AB.train()
         G_BA.train()
@@ -112,70 +103,60 @@ if __name__ == "__main__":
         D_B.train()
         disc_A_losses, disc_B_losses, gen_AB_losses = [], [], []
         real_As, real_Bs, fake_As, fake_Bs = [], [], [], []
+        sampled_idx = get_random_ids(len(dataloader), args.sample_batches)
         for batch_idx, (real_A, real_B) in enumerate(dataloader):
             real_A = torch.nn.functional.interpolate(real_A, size=args.target_shape).to(device)
             real_B = torch.nn.functional.interpolate(real_B, size=args.target_shape).to(device)
 
-            ### Update Generators ###
-            ## Forward Pass ##
+            ## generator forward pass ##
             fake_A = G_BA(real_B)
             fake_B = G_AB(real_A)
             cycle_A = G_BA(fake_B)
             cycle_B = G_AB(fake_A)
-
-            set_requires_grad([D_A, D_B], False)
-            optimizer_G.zero_grad()
-            ## Adversarial Loss ##
-            fake_A_logits = D_A(fake_A)
-            fake_B_logits = D_B(fake_B)
-            adversarial_loss = criterion_GAN(fake_A_logits, torch.ones_like(fake_A_logits)) + criterion_GAN(fake_B_logits, torch.ones_like(fake_B_logits))
-
-            ## cycle consistency loss ##
-            cycle_loss = criterion_cycle(cycle_A, real_A) + criterion_cycle(cycle_B, real_B)
-
-            # identity loss ##
             identity_A = G_BA(real_A)
             identity_B = G_AB(real_B)
-            identity_loss = criterion_identity(identity_A, real_A) + criterion_identity(identity_B, real_B)
 
-            # weighted generator loss
+            # disc forward pass
+            fake_A_logits = D_A(fake_A)
+            fake_B_logits = D_B(fake_B)
+            real_A_logits = D_A(real_A)
+            real_B_logits = D_B(real_B)
+
+            # sample from queue
+            pool_fake_A = pool_A.sample(fake_A.detach())
+            pool_fake_B = pool_A.sample(fake_B.detach())
+            fake_pool_A_logits = D_B(pool_fake_A)
+            fake_pool_B_logits = D_B(pool_fake_B)
+
+            # disc loss
+            disc_A_fake_loss = criterion_GAN(fake_pool_A_logits, torch.zeros_like(fake_pool_A_logits))
+            disc_A_real_loss = criterion_GAN(real_A_logits, torch.ones_like(real_A_logits))
+            disc_A_loss = (disc_A_fake_loss + disc_A_real_loss) / 2
+            disc_B_fake_loss = criterion_GAN(fake_pool_B_logits, torch.zeros_like(fake_pool_B_logits))
+            disc_B_real_loss = criterion_GAN(real_B_logits, torch.ones_like(real_B_logits))
+            disc_B_loss = (disc_B_fake_loss + disc_B_real_loss) / 2
+            disc_loss = disc_A_loss + disc_A_loss
+
+            # generator loss
+            adversarial_loss = criterion_GAN(fake_A_logits, torch.ones_like(fake_A_logits)) + criterion_GAN(fake_B_logits, torch.ones_like(fake_B_logits))
+            cycle_loss = criterion_cycle(cycle_A, real_A) + criterion_cycle(cycle_B, real_B)
+            identity_loss = criterion_identity(identity_A, real_A) + criterion_identity(identity_B, real_B)
             gen_loss = adversarial_loss + args.lambda_identity*identity_loss + args.lambda_cycle*cycle_loss
 
-            # SGD
+            # update discs
+            optimizer_D.zero_grad()
+            disc_loss.backward()
+            optimizer_D.step()
+
+            # update gens
+            optimizer_G.zero_grad()
             gen_loss.backward()
             optimizer_G.step()
 
-            ### Update discriminator A ###
-            set_requires_grad([D_A, D_B], True)
-            optimizer_D_A.zero_grad()
-            with torch.no_grad():
-                fake_A = G_BA(real_B)
-                fake_A = pool_A.sample(fake_A)
-            fake_logits = D_A(fake_A.detach())
-            disc_A_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
-            real_logits = D_A(real_A)
-            disc_A_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
-            disc_A_loss = (disc_A_fake_loss + disc_A_real_loss) / 2
-            disc_A_losses.append(disc_A_loss.item())
-            disc_A_loss.backward()
-            optimizer_D_A.step()
-
-            ### Update discriminator B ###
-            optimizer_D_B.zero_grad()
-            with torch.no_grad():
-                fake_B = G_AB(real_A)
-                fake_B = pool_B.sample(fake_B)
-            fake_logits = D_B(fake_B.detach())
-            disc_B_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
-            real_logits = D_B(real_B)
-            disc_B_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
-            disc_B_loss = (disc_B_fake_loss + disc_B_real_loss) / 2
-            disc_B_losses.append(disc_B_loss.item())
-            disc_B_loss.backward()
-            optimizer_D_B.step()
-
             # log
             gen_AB_losses.append(gen_loss.item())
+            disc_A_losses.append(disc_A_loss.item())
+            disc_B_losses.append(disc_B_loss.item())
             if batch_idx in sampled_idx:
                 real_As.append(real_A.detach().cpu())
                 real_Bs.append(real_B.detach().cpu())
@@ -183,8 +164,7 @@ if __name__ == "__main__":
                 fake_Bs.append(fake_B.detach().cpu())
 
         images = [torch.cat(real_As), torch.cat(real_Bs), torch.cat(fake_As), torch.cat(fake_Bs)]
-        lr_scheduler_D_A.step()
-        lr_scheduler_D_B.step()
+        lr_scheduler_D.step()
         lr_scheduler_G.step()
 
         if (epoch + 1) % args.progress_interval == 0:
@@ -205,9 +185,8 @@ if __name__ == "__main__":
                     'G_BA': G_BA.state_dict(),
                     'optimizer_G': optimizer_G.state_dict(),
                     'D_A': D_A.state_dict(),
-                    'optimizer_D_A': optimizer_D_A.state_dict(),
                     'D_B': D_B.state_dict(),
-                    'optimizer_D_B': optimizer_D_B.state_dict()
+                    'optimizer_D': optimizer_D.state_dict()
                 }, f"{args.checkpoint_dir}/cycleGAN_{epoch}.pth")
 
                 # saving space, only saving latest weights
