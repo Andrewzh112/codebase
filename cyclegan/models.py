@@ -45,6 +45,15 @@ def initialize_weights(model, nonlinearity='leaky_relu'):
             nn.init.constant_(m.bias, 0)
 
 
+def set_requires_grad(nets, requires_grad=False):
+        if not isinstance(nets, list):
+            nets = [nets]
+        for net in nets:
+            if net is not None:
+                for param in net.parameters():
+                    param.requires_grad = requires_grad
+
+
 class Generator(nn.Module):
     def __init__(
         self,

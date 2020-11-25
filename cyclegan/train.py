@@ -6,7 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 import itertools
 from tqdm import tqdm
 from data import CycleImageDataset
-from models import Generator, Discriminator
+from models import Generator, Discriminator, set_requires_grad
 from utils import ReplayBuffer, LambdaLR, make_images, get_random_ids
 
 
@@ -117,17 +117,20 @@ if __name__ == "__main__":
             real_B = torch.nn.functional.interpolate(real_B, size=args.target_shape).to(device)
 
             ### Update Generators ###
-            optimizer_G.zero_grad()
-            ## Adversarial Loss ##
+            ## Forward Pass ##
             fake_A = G_BA(real_B)
             fake_B = G_AB(real_A)
+            cycle_A = G_BA(fake_B)
+            cycle_B = G_AB(fake_A)
+
+            set_requires_grad([D_A, D_B], False)
+            optimizer_G.zero_grad()
+            ## Adversarial Loss ##
             fake_A_logits = D_A(fake_A)
             fake_B_logits = D_B(fake_B)
             adversarial_loss = criterion_GAN(fake_A_logits, torch.ones_like(fake_A_logits)) + criterion_GAN(fake_B_logits, torch.ones_like(fake_B_logits))
 
             ## cycle consistency loss ##
-            cycle_A = G_BA(fake_B)
-            cycle_B = G_AB(fake_A)
             cycle_loss = criterion_cycle(cycle_A, real_A) + criterion_cycle(cycle_B, real_B)
 
             # identity loss ##
@@ -143,11 +146,12 @@ if __name__ == "__main__":
             optimizer_G.step()
 
             ### Update discriminator A ###
+            set_requires_grad([D_A, D_B], True)
             optimizer_D_A.zero_grad()
             with torch.no_grad():
                 fake_A = G_BA(real_B)
                 fake_A = pool_A.sample(fake_A)
-            fake_logits = D_A(fake_A)
+            fake_logits = D_A(fake_A.detach())
             disc_A_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
             real_logits = D_A(real_A)
             disc_A_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
@@ -161,7 +165,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 fake_B = G_AB(real_A)
                 fake_B = pool_B.sample(fake_B)
-            fake_logits = D_B(fake_B)
+            fake_logits = D_B(fake_B.detach())
             disc_B_fake_loss = criterion_GAN(fake_logits, torch.zeros_like(fake_logits))
             real_logits = D_B(real_B)
             disc_B_real_loss = criterion_GAN(real_logits, torch.ones_like(real_logits))
