@@ -96,6 +96,7 @@ if __name__ == "__main__":
             total=(args.n_epochs - args.starting_epoch)
         )
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    sampled_idx = get_random_ids(len(dataloader), args.sample_batches)
     for epoch in pbar:
         G_AB.train()
         G_BA.train()
@@ -103,7 +104,6 @@ if __name__ == "__main__":
         D_B.train()
         disc_A_losses, disc_B_losses, gen_AB_losses = [], [], []
         real_As, real_Bs, fake_As, fake_Bs = [], [], [], []
-        sampled_idx = get_random_ids(len(dataloader), args.sample_batches)
         for batch_idx, (real_A, real_B) in enumerate(dataloader):
             real_A = torch.nn.functional.interpolate(real_A, size=args.target_shape).to(device)
             real_B = torch.nn.functional.interpolate(real_B, size=args.target_shape).to(device)
@@ -163,7 +163,6 @@ if __name__ == "__main__":
                 fake_As.append(fake_A.detach().cpu())
                 fake_Bs.append(fake_B.detach().cpu())
 
-        images = [torch.cat(real_As), torch.cat(real_Bs), torch.cat(fake_As), torch.cat(fake_Bs)]
         lr_scheduler_D.step()
         lr_scheduler_G.step()
 
