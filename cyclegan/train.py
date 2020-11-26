@@ -102,7 +102,7 @@ if __name__ == "__main__":
         G_BA.train()
         D_A.train()
         D_B.train()
-        disc_A_losses, disc_B_losses, gen_AB_losses = [], [], []
+        disc_losses, gen_AB_losses = [], []
         real_As, real_Bs, fake_As, fake_Bs = [], [], [], []
         for batch_idx, (real_A, real_B) in enumerate(dataloader):
             real_A = torch.nn.functional.interpolate(real_A, size=args.target_shape).to(device)
@@ -155,8 +155,7 @@ if __name__ == "__main__":
 
             # log
             gen_AB_losses.append(gen_loss.item())
-            disc_A_losses.append(disc_A_loss.item())
-            disc_B_losses.append(disc_B_loss.item())
+            disc_losses.append(disc_loss.item())
             if batch_idx in sampled_idx:
                 real_As.append(real_A.detach().cpu())
                 real_Bs.append(real_B.detach().cpu())
@@ -168,8 +167,7 @@ if __name__ == "__main__":
 
         if (epoch + 1) % args.progress_interval == 0:
             writer.add_scalars('Train Losses', {
-                    'Discriminator A': sum(disc_A_losses) / len(disc_A_losses),
-                    'Discriminator B': sum(disc_B_losses) / len(disc_B_losses),
+                    'Discriminator': sum(disc_losses) / len(disc_losses),
                     'Generator': sum(gen_AB_losses) / len(gen_AB_losses)
                 }, global_step=epoch)
             writer.add_image('Fake A', make_images(fake_As), global_step=epoch)
@@ -194,7 +192,6 @@ if __name__ == "__main__":
         tqdm.write('#########################################################')
         tqdm.write(
             f'Epoch {epoch + 1}/{args.n_epochs}, \
-                Train Disc A loss: {sum(disc_A_losses) / len(disc_A_losses):.3f}, \
-                Train Disc B loss: {sum(disc_B_losses) / len(disc_B_losses):.3f}, \
+                Train Disc B loss: {sum(disc_losses) / len(disc_losses):.3f}, \
                 Train Gen Loss: {sum(gen_AB_losses) / len(gen_AB_losses):.3f}'
         )
