@@ -206,5 +206,5 @@ if __name__ == "__main__":
                 Discriminator A: {sum(disc_A_losses) / len(disc_A_losses):.3f}, \
                 Discriminator B: {sum(disc_B_losses) / len(disc_B_losses):.3f}, \
                 Generator A: {sum(gen_A_losses) / len(gen_A_losses):.3f}, \
-                Generator B: {sum(gen_B_losses) / len(gen_B_losses):.3f}
+                Generator B: {sum(gen_B_losses) / len(gen_B_losses):.3f}'
         )
