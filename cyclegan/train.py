@@ -102,7 +102,7 @@ if __name__ == "__main__":
         G_BA.train()
         D_A.train()
         D_B.train()
-        disc_losses, gen_AB_losses = [], []
+        disc_A_losses, gen_A_losses, disc_B_losses, gen_B_losses = [], [], [], []
         real_As, real_Bs, fake_As, fake_Bs = [], [], [], []
         for batch_idx, (real_A, real_B) in enumerate(dataloader):
             real_A = torch.nn.functional.interpolate(real_A, size=args.target_shape).to(device)
@@ -138,24 +138,33 @@ if __name__ == "__main__":
             disc_loss = disc_A_loss + disc_A_loss
 
             # generator loss
-            adversarial_loss = criterion_GAN(fake_A_logits, torch.ones_like(fake_A_logits)) + criterion_GAN(fake_B_logits, torch.ones_like(fake_B_logits))
-            cycle_loss = criterion_cycle(cycle_A, real_A) + criterion_cycle(cycle_B, real_B)
-            identity_loss = criterion_identity(identity_A, real_A) + criterion_identity(identity_B, real_B)
-            gen_loss = adversarial_loss + args.lambda_identity*identity_loss + args.lambda_cycle*cycle_loss
-
-            # update discs
-            optimizer_D.zero_grad()
-            disc_loss.backward()
-            optimizer_D.step()
+            adversarial_A_loss = criterion_GAN(fake_A_logits, torch.ones_like(fake_A_logits))
+            adversarial_B_loss = criterion_GAN(fake_B_logits, torch.ones_like(fake_B_logits))
+            cycle_A_loss = criterion_cycle(cycle_A, real_A)
+            cycle_B_loss = criterion_cycle(cycle_B, real_B)
+            identity_A_loss = criterion_identity(identity_A, real_A)
+            identity_B_loss = criterion_identity(identity_B, real_B)
+            gen_A_loss = adversarial_A_loss + args.lambda_identity*identity_A_loss + args.lambda_cycle*cycle_A_loss
+            gen_B_loss = adversarial_B_loss + args.lambda_identity*identity_B_loss + args.lambda_cycle*cycle_B_loss
+            gen_loss = gen_A_loss + gen_B_loss
 
             # update gens
+            set_requires_grad([D_A, D_B], False)
             optimizer_G.zero_grad()
             gen_loss.backward()
             optimizer_G.step()
 
+            # update discs
+            set_requires_grad([D_A, D_B], True)
+            optimizer_D.zero_grad()
+            disc_loss.backward()
+            optimizer_D.step()
+
             # log
-            gen_AB_losses.append(gen_loss.item())
-            disc_losses.append(disc_loss.item())
+            gen_A_losses.append(gen_A_loss.item())
+            gen_B_losses.append(gen_B_loss.item())
+            disc_A_losses.append(disc_A_loss.item())
+            disc_B_losses.append(disc_B_loss.item())
             if batch_idx in sampled_idx:
                 real_As.append(real_A.detach().cpu())
                 real_Bs.append(real_B.detach().cpu())
@@ -167,8 +176,10 @@ if __name__ == "__main__":
 
         if (epoch + 1) % args.progress_interval == 0:
             writer.add_scalars('Train Losses', {
-                    'Discriminator': sum(disc_losses) / len(disc_losses),
-                    'Generator': sum(gen_AB_losses) / len(gen_AB_losses)
+                    'Discriminator A': sum(disc_A_losses) / len(disc_A_losses),
+                    'Discriminator B': sum(disc_B_losses) / len(disc_B_losses),
+                    'Generator A': sum(gen_A_losses) / len(gen_A_losses),
+                    'Generator B': sum(gen_B_losses) / len(gen_B_losses)
                 }, global_step=epoch)
             writer.add_image('Fake A', make_images(fake_As), global_step=epoch)
             writer.add_image('Fake B', make_images(fake_Bs), global_step=epoch)
@@ -192,6 +203,8 @@ if __name__ == "__main__":
         tqdm.write('#########################################################')
         tqdm.write(
             f'Epoch {epoch + 1}/{args.n_epochs}, \
-                Train Disc B loss: {sum(disc_losses) / len(disc_losses):.3f}, \
-                Train Gen Loss: {sum(gen_AB_losses) / len(gen_AB_losses):.3f}'
+                Discriminator A: {sum(disc_A_losses) / len(disc_A_losses):.3f}, \
+                Discriminator B: {sum(disc_B_losses) / len(disc_B_losses):.3f}, \
+                Generator A: {sum(gen_A_losses) / len(gen_A_losses):.3f}, \
+                Generator B: {sum(gen_B_losses) / len(gen_B_losses):.3f}
         )

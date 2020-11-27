@@ -133,45 +133,46 @@ class Discriminator(nn.Module):
         super().__init__()
         self.disc = nn.Sequential(
             nn.Conv2d(
-                    input_channels,
                     hidden_dim,
-                    kernel_size=7,
-                    padding=3,
-                    padding_mode='reflect'
+                    hidden_dim,
+                    kernel_size=4,
+                    padding=1,
+                    stride=2
                 ),
+            nn.LeakyReLU(0.2),
             nn.Conv2d(
                     hidden_dim,
                     hidden_dim * 2,
                     kernel_size=4,
                     padding=1,
-                    stride=2,
-                    padding_mode='reflect'
+                    stride=2
                 ),
+            nn.InstanceNorm2d(hidden_dim * 4),
             nn.LeakyReLU(0.2),
             nn.Conv2d(
                     hidden_dim * 2,
                     hidden_dim * 4,
                     kernel_size=4,
                     padding=1,
-                    stride=2,
-                    padding_mode='reflect'
+                    stride=2
                 ),
-            nn.InstanceNorm2d(hidden_dim * 4),
+            nn.InstanceNorm2d(hidden_dim * 8),
             nn.LeakyReLU(0.2),
             nn.Conv2d(
                     hidden_dim * 4,
                     hidden_dim * 8,
                     kernel_size=4,
                     padding=1,
-                    stride=2,
-                    padding_mode='reflect'
+                    stride=1,
                 ),
             nn.InstanceNorm2d(hidden_dim * 8),
             nn.LeakyReLU(0.2),
             nn.Conv2d(
                 hidden_dim * 8,
                 out_channels=1,
-                kernel_size=1
+                kernel_size=1,
+                padding=1,
+                stride=1,
             )
         )
         initialize_weights(self)
