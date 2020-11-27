@@ -133,7 +133,7 @@ class Discriminator(nn.Module):
         super().__init__()
         self.disc = nn.Sequential(
             nn.Conv2d(
-                    hidden_dim,
+                    input_channels,
                     hidden_dim,
                     kernel_size=4,
                     padding=1,
