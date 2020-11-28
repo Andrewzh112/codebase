@@ -50,6 +50,7 @@ class SimSiam(pl.LightningModule):
         self.targets = set()
         self.total_num, self.total_top1 = 0, 0
         self.is_feature_data = True
+        self.epoch = 0
 
     def forward(self, x1, x2=None, istrain=True):
         if istrain:
@@ -63,29 +64,32 @@ class SimSiam(pl.LightningModule):
         x1, x2 = train_batch
         z1, z2, p1, p2 = self.forward(x1, x2)
         loss = self._cosineloss(p1, z2) + self._cosineloss(p2, z1)
-        self.log('train_loss', loss)
-        return loss
+        return loss.item()
+
+    def train_epoch_end(self, train_losses):
+        self.log('train_loss', sum(train_losses) / len(train_losses))
+        self.logger.experiment.add_scalar(
+                'train loss',
+                sum(train_losses) / len(train_losses),
+                global_step=self.epoch)
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
+        data, target = batch
+        feature = self.forward(data, istrain=False)
+        feature = F.normalize(feature, dim=1)
+
         if dataloader_idx == 0:
-            data, target = batch
-            feature = self.forward(data, istrain=False)
-            feature = F.normalize(feature, dim=1)
             self.feature_bank.append(feature)
             for t in target:
                 self.targets.add(t)
             return
         else:
-            data, target = batch
-            feature = self.forward(data, istrain=False)
-            feature = F.normalize(feature, dim=1)
-
             pred_labels = self.knn_predict(feature, self.args.knn_k, self.args.knn_t)
             self.total_num += data.size(0)
             self.total_top1 += (pred_labels[:, 0] == target).float().sum().item()
             return self.total_top1 / self.total_num * 100
 
-    def validation_epoch_end(self, val_step_outputs):
+    def validation_epoch_end(self, top1_acc):
         if self.is_feature_data:
             self.feature_bank = torch.cat(self.feature_bank, dim=0).t().contiguous()
             self.feature_labels = torch.tensor(sorted(self.targets), device=self.feature_bank.device)
@@ -95,8 +99,13 @@ class SimSiam(pl.LightningModule):
             # resetting & logging
             self.feature_bank = []
             self.total_num, self.total_top1 = 0, 0
-            self.log('top 1 accuracy', sum(val_step_outputs) / len(val_step_outputs))
+            self.log('top 1 accuracy', sum(top1_acc) / len(top1_acc))
+            self.logger.experiment.add_scalar(
+                'top 1 accuracy',
+                sum(top1_acc) / len(top1_acc),
+                global_step=self.epoch)
             self.is_feature_data = True
+            self.epoch += 1
 
     def knn_predict(self, feature, knn_k, knn_t):
         # compute cos similarity between each feature vector and feature bank ---> [B, N]
