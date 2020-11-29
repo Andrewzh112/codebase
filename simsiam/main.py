@@ -4,8 +4,8 @@ from data import GaussianBlur, CIFAR10Pairs
 from torch.utils.data import DataLoader
 import argparse
 import pytorch_lightning as pl
-from model import SimSiam 
 from pytorch_lightning.loggers import TensorBoardLogger
+from model import SimSiam
 
 
 parser = argparse.ArgumentParser(description='Train SimSiam')
@@ -29,8 +29,9 @@ parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperatur
 
 # misc.
 parser.add_argument('--data_root', default='../data', type=str, help='path to data')
+parser.add_argument('--logs_root', default='logs', type=str, help='path to logs')
 
-args = parser.parse_args()
+args = parser.parse_known_args()[0]
 
 if __name__ == '__main__':
     """https://github.com/facebookresearch/moco"""
@@ -58,8 +59,11 @@ if __name__ == '__main__':
     feature_loader = DataLoader(feature_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
     test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
+    parser.add_argument('--targets', default=train_data.targets)
+    parser.add_argument('--classes', default=len(train_data.classes))
+    args = parser.parse_args()
 
-    logger = TensorBoardLogger("tb_logs", name="simsiam")
+    logger = TensorBoardLogger(args.logs_root, name="simsiam")
     model = SimSiam(args)
 
     trainer = pl.Trainer(gpus=2, accelerator='ddp', max_epochs=args.epochs, logger=logger, num_sanity_val_steps=0)

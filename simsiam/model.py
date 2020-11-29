@@ -47,7 +47,6 @@ class SimSiam(pl.LightningModule):
         )
 
         self.feature_bank = []
-        self.targets = set()
         self.total_num, self.total_top1 = 0, 0
         self.is_feature_data = True
         self.epoch = 0
@@ -80,15 +79,12 @@ class SimSiam(pl.LightningModule):
 
         if dataloader_idx == 0:
             self.feature_bank.append(feature)
-            for t in target:
-                self.targets.add(t)
             return
         else:
             if batch_idx == 0:
                 # complete featurebank & setup
                 self.feature_bank = torch.cat(self.feature_bank, dim=0).t().contiguous()
-                self.feature_labels = torch.tensor(sorted(self.targets), device=self.feature_bank.device)
-                self.classes = len(self.feature_labels)
+                self.feature_labels = torch.tensor(self.args.targets, device=self.feature_bank.device)
                 self.is_feature_data = False
             # pred_labels = [self.knn_predict(f, self.args.knn_k, self.args.knn_t) for f in feature]
             pred_labels = self.knn_predict(feature, self.args.knn_k, self.args.knn_t)
@@ -119,14 +115,14 @@ class SimSiam(pl.LightningModule):
         sim_matrix = None
         # [B, K]
         sim_labels = torch.gather(self.feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)
-        sim_weight = (sim_weight / knn_t).exp().unsqueeze(dim=-1)
+        sim_weight = (sim_weight / knn_t).exp()
 
         # counts for each class
-        one_hot_label = torch.zeros(feature.size(0) * knn_k, self.classes, device=sim_labels.device)
+        one_hot_label = torch.zeros(feature.size(0) * knn_k, self.args.classes, device=sim_labels.device)
         # [B*K, C]
         one_hot_label = one_hot_label.scatter_(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
         # weighted score ---> [B, C]
-        pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, self.classes) * sim_weight, dim=1)
+        pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, self.args.classes) * sim_weight.unsqueeze(-1), dim=1)
 
         pred_labels = pred_scores.argsort(dim=-1, descending=True)
         return pred_labels
