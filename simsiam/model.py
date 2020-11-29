@@ -63,11 +63,11 @@ class SimSiam(pl.LightningModule):
     def training_step(self, train_batch, batch_idx):
         x1, x2 = train_batch
         z1, z2, p1, p2 = self.forward(x1, x2)
-        loss = self._cosineloss(p1, z2) + self._cosineloss(p2, z1)
-        return loss.item()
+        loss = (self._cosineloss(p1, z2) + self._cosineloss(p2, z1)) / 2
+        self.log('train_loss', loss)
+        return loss
 
     def train_epoch_end(self, train_losses):
-        self.log('train_loss', sum(train_losses) / len(train_losses))
         self.logger.experiment.add_scalar(
                 'train loss',
                 sum(train_losses) / len(train_losses),
@@ -84,19 +84,22 @@ class SimSiam(pl.LightningModule):
                 self.targets.add(t)
             return
         else:
+            if batch_idx == 0:
+                # complete featurebank & setup
+                self.feature_bank = torch.cat(self.feature_bank, dim=0).t().contiguous()
+                self.feature_labels = torch.tensor(sorted(self.targets), device=self.feature_bank.device)
+                self.classes = len(self.feature_labels)
+                self.is_feature_data = False
+            # pred_labels = [self.knn_predict(f, self.args.knn_k, self.args.knn_t) for f in feature]
             pred_labels = self.knn_predict(feature, self.args.knn_k, self.args.knn_t)
             self.total_num += data.size(0)
             self.total_top1 += (pred_labels[:, 0] == target).float().sum().item()
             return self.total_top1 / self.total_num * 100
 
     def validation_epoch_end(self, top1_acc):
-        if self.is_feature_data:
-            self.feature_bank = torch.cat(self.feature_bank, dim=0).t().contiguous()
-            self.feature_labels = torch.tensor(sorted(self.targets), device=self.feature_bank.device)
-            self.classes = len(self.feature_labels)
-            self.is_feature_data = False
-        else:
+        if not self.is_feature_data:
             # resetting & logging
+            top1_acc = top1_acc[1]
             self.feature_bank = []
             self.total_num, self.total_top1 = 0, 0
             self.log('top 1 accuracy', sum(top1_acc) / len(top1_acc))
@@ -112,16 +115,18 @@ class SimSiam(pl.LightningModule):
         sim_matrix = torch.mm(feature, self.feature_bank)
         # [B, K]
         sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1)
+        # free memory
+        sim_matrix = None
         # [B, K]
         sim_labels = torch.gather(self.feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)
-        sim_weight = (sim_weight / knn_t).exp()
+        sim_weight = (sim_weight / knn_t).exp().unsqueeze(dim=-1)
 
         # counts for each class
         one_hot_label = torch.zeros(feature.size(0) * knn_k, self.classes, device=sim_labels.device)
         # [B*K, C]
-        one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
+        one_hot_label = one_hot_label.scatter_(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
         # weighted score ---> [B, C]
-        pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, self.classes) * sim_weight.unsqueeze(dim=-1), dim=1)
+        pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, self.classes) * sim_weight, dim=1)
 
         pred_labels = pred_scores.argsort(dim=-1, descending=True)
         return pred_labels

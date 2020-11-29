@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser(description='Train SimSiam')
 # training configs
 parser.add_argument('--lr', default=0.03, type=float, help='initial learning rate')
 parser.add_argument('--epochs', default=800, type=int, metavar='N', help='number of total epochs to run')
-parser.add_argument('--batch_size', default=512, type=int, metavar='N', help='mini-batch size')
+parser.add_argument('--batch_size', default=128, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--wd', default=5e-4, type=float, metavar='W', help='weight decay')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum for optimizer')
 
@@ -52,17 +52,15 @@ if __name__ == '__main__':
                 transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
             ])
 
-    train_data = CIFAR10Pairs(root='../data', train=True, transform=train_transform, download=True)
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=16, pin_memory=True,
-                                  drop_last=True)
-    feature_data = CIFAR10(root='data', train=True, transform=test_transform, download=True)
-    feature_loader = DataLoader(feature_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
-    
-    test_data = CIFAR10(root='data', train=False, transform=test_transform, download=True)
-    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
+    train_data = CIFAR10Pairs(root=args.data_root, train=True, transform=train_transform, download=True)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=28)
+    feature_data = CIFAR10(root=args.data_root, train=True, transform=test_transform, download=True)
+    feature_loader = DataLoader(feature_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
+    test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
 
     logger = TensorBoardLogger("tb_logs", name="simsiam")
     model = SimSiam(args)
 
-    trainer = pl.Trainer(logger=logger)
+    trainer = pl.Trainer(gpus=2, accelerator='ddp', max_epochs=args.epochs, logger=logger, num_sanity_val_steps=0)
     trainer.fit(model, train_loader, [feature_loader, test_loader])
