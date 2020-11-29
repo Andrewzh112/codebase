@@ -16,6 +16,7 @@ parser.add_argument('--epochs', default=800, type=int, metavar='N', help='number
 parser.add_argument('--batch_size', default=128, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--wd', default=5e-4, type=float, metavar='W', help='weight decay')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum for optimizer')
+parser.add_argument('--gpus', default=2, type=int, help='number of gpus')
 
 # simsiam model configs
 parser.add_argument('-a', '--backbone', default='resnet18')
@@ -66,5 +67,5 @@ if __name__ == '__main__':
     logger = TensorBoardLogger(args.logs_root, name="simsiam")
     model = SimSiam(args)
 
-    trainer = pl.Trainer(gpus=2, accelerator='ddp', max_epochs=args.epochs, logger=logger, num_sanity_val_steps=0)
+    trainer = pl.Trainer(gpus=args.gpus, accelerator='ddp', max_epochs=args.epochs, logger=logger, num_sanity_val_steps=0)
     trainer.fit(model, train_loader, [feature_loader, test_loader])
