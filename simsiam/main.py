@@ -7,15 +7,17 @@ from torch.nn import functional as F
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
+from sklearn.exceptions import ConvergenceWarning
 
 import argparse
 from tqdm import tqdm
 import os
+from warnings import simplefilter
 
 from model import SimSiam
 from data import GaussianBlur, CIFAR10Pairs
 
-
+simplefilter(action='ignore', category=ConvergenceWarning)
 parser = argparse.ArgumentParser(description='Train SimSiam')
 
 # training configs
@@ -85,8 +87,8 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs // 40)
-
-    for epoch in tqdm(range(args.epochs)):
+    pbar = tqdm(range(args.epochs))
+    for epoch in pbar:
         model.train()
         train_losses = []
         for x1, x2 in train_loader:
@@ -97,6 +99,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            pbar.set_postfix({'Loss': round(loss.item(), 3)})
         writer.add_scalar('Train Loss', sum(train_losses) / len(train_losses), global_step=epoch)
 
         model.eval()
@@ -108,22 +111,22 @@ if __name__ == '__main__':
             feature = F.normalize(feature, dim=1)
             feature_bank.append(feature)
             targets.append(target)
-        feature_bank = torch.cat(feature_bank, dim=0)
-        feature_labels = torch.tensor(targets, device=feature_bank.device)
+        feature_bank = torch.cat(feature_bank, dim=0).cpu().numpy()
+        feature_labels = torch.cat(targets, dim=0).numpy()
 
         linear_classifier = LogisticRegression()
-        linear_classifier.fit(feature_bank.cpu().numpy(), feature_labels.cpu().numpy())
+        linear_classifier.fit(feature_bank, feature_labels)
 
         y_preds, y_trues = [], []
         for data, target in feature_loader:
             data = data.to(device)
             with torch.no_grad():
                 feature = model(data, istrain=False)
-            feature = F.normalize(feature, dim=1)
+            feature = F.normalize(feature, dim=1).cpu().numpy()
             y_preds.append(linear_classifier.predict(feature))
             y_trues.append(target)
-        y_preds = torch.cat(y_preds, dim=0).cpu().numpy()
-        y_trues = torch.cat(y_trues, dim=0).cpu().numpy()
+        y_preds = torch.cat(y_preds, dim=0)
+        y_trues = torch.cat(y_trues, dim=0).numpy()
         top1acc = accuracy_score(y_trues, y_preds) * 100
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
 
