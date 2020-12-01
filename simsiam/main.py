@@ -40,6 +40,8 @@ parser.add_argument('--data_root', default='../data', type=str, help='path to da
 parser.add_argument('--logs_root', default='logs', type=str, help='path to logs')
 parser.add_argument('--check_point', default='check_point/simsiam.pth', type=str, help='path to model weights')
 
+args = parser.parse_args()
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def cosine_loss(p, z):
@@ -83,8 +85,6 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs // 40)
-    os.mkdir(os.path.split(args.check_point)[0], exist_ok=True)
-    os.mkdir(os.path.split(args.logs_root), exist_ok=True)
 
     for epoch in tqdm(range(args.epochs)):
         model.train()
