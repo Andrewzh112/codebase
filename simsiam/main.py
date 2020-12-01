@@ -10,6 +10,7 @@ from sklearn.metrics import accuracy_score
 
 import argparse
 from tqdm import tqdm
+import os
 
 from model import SimSiam
 from data import GaussianBlur, CIFAR10Pairs
@@ -39,7 +40,7 @@ parser.add_argument('--data_root', default='../data', type=str, help='path to da
 parser.add_argument('--logs_root', default='logs', type=str, help='path to logs')
 parser.add_argument('--check_point', default='check_point/simsiam.pth', type=str, help='path to model weights')
 
-args = parser.parse_known_args()[0]
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def cosine_loss(p, z):
         z = z.detach()
@@ -74,11 +75,7 @@ if __name__ == '__main__':
     feature_loader = DataLoader(feature_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
     test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
-    parser.add_argument('--targets', default=train_data.targets)
-    parser.add_argument('--classes', default=len(train_data.classes))
     args = parser.parse_args()
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     writer = SummaryWriter(args.logs_root)
     model = SimSiam(args).to(device)
@@ -86,6 +83,8 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs // 40)
+    os.mkdir(os.path.split(args.check_point)[0], exist_ok=True)
+    os.mkdir(os.path.split(args.logs_root), exist_ok=True)
 
     for epoch in tqdm(range(args.epochs)):
         model.train()
@@ -123,7 +122,7 @@ if __name__ == '__main__':
             feature = F.normalize(feature, dim=1)
             y_preds.append(linear_classifier.predict(feature))
             y_trues.append(target)
-        y_preds = torch.cat(feature_bank, dim=0).cpu().numpy()
+        y_preds = torch.cat(y_preds, dim=0).cpu().numpy()
         y_trues = torch.cat(y_trues, dim=0).cpu().numpy()
         top1acc = accuracy_score(y_trues, y_preds) * 100
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
