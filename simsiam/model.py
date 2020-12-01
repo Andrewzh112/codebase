@@ -130,7 +130,7 @@ class SimSiam(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.parameters(), lr=self.args.lr,
                                     momentum=self.args.momentum, weight_decay=self.args.wd)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.args.epochs)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.args.epochs // 40)
         return [optimizer], [scheduler]
 
     def _cosineloss(self, p, z):
