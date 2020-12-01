@@ -133,12 +133,12 @@ if __name__ == '__main__':
         top1acc = accuracy_score(y_trues, y_preds) * 100
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
 
-        tqdm.write('###################################################################')
+        tqdm.write('#########################################################')
         tqdm.write(
             f'Epoch {epoch + 1}/{args.epochs}, \
                 Train Loss: {sum(train_losses) / len(train_losses):.3f}, \
                 Top Acc @ 1: {top1acc:.3f}, \
-                Learning Rate: {scheduler.get_last_lr()[0]}'
+                Learning Rate: {scheduler.get_last_lr()}'
         )
         torch.save(model.state_dict(), args.check_point)
         scheduler.step()
