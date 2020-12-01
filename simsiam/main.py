@@ -11,7 +11,7 @@ from sklearn.exceptions import ConvergenceWarning
 
 import argparse
 from tqdm import tqdm
-import os
+from pathlib import Path
 from warnings import simplefilter
 
 from model import SimSiam
@@ -83,10 +83,13 @@ if __name__ == '__main__':
 
     writer = SummaryWriter(args.logs_root)
     model = SimSiam(args).to(device)
+    Path(args.check_point.split('/')[0]).mkdir(parents=True, exist_ok=True)
+    Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs // 40)
+
     pbar = tqdm(range(args.epochs))
     for epoch in pbar:
         model.train()
@@ -94,6 +97,7 @@ if __name__ == '__main__':
         for x1, x2 in train_loader:
             x1, x2 = x1.to(device), x2.to(device)
             z1, z2, p1, p2 = model(x1, x2)
+            # symmetric loss
             loss = (cosine_loss(p1, z2) + cosine_loss(p2, z1)) / 2
             train_losses.append(loss.item())
             optimizer.zero_grad()
@@ -104,6 +108,7 @@ if __name__ == '__main__':
 
         model.eval()
         feature_bank, targets = [], []
+        # get current featuremaps & fit LR
         for data, target in feature_loader:
             data = data.to(device)
             with torch.no_grad():
@@ -123,9 +128,8 @@ if __name__ == '__main__':
             with torch.no_grad():
                 feature = model(data, istrain=False)
             feature = F.normalize(feature, dim=1).cpu().numpy()
-            y_preds.append(linear_classifier.predict(feature))
+            y_preds.extend(linear_classifier.predict(feature).tolist())
             y_trues.append(target)
-        y_preds = torch.cat(y_preds, dim=0)
         y_trues = torch.cat(y_trues, dim=0).numpy()
         top1acc = accuracy_score(y_trues, y_preds) * 100
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
