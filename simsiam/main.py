@@ -79,7 +79,6 @@ if __name__ == '__main__':
     feature_loader = DataLoader(feature_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
     test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
-    args = parser.parse_args()
 
     writer = SummaryWriter(args.logs_root)
     model = SimSiam(args).to(device)
