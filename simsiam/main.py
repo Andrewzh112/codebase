@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs // 40)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, int(args.epochs * 0.005))
 
     pbar = tqdm(range(args.epochs))
     for epoch in pbar:
@@ -137,7 +137,8 @@ if __name__ == '__main__':
         tqdm.write(
             f'Epoch {epoch + 1}/{args.epochs}, \
                 Train Loss: {sum(train_losses) / len(train_losses):.3f}, \
-                Top Acc @ 1: {top1acc:.3f}'
+                Top Acc @ 1: {top1acc:.3f}, \
+                Learning Rate: {scheduler.get_last_lr()}'
         )
         torch.save(model.state_dict(), args.check_point)
         scheduler.step()
