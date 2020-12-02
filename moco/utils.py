@@ -54,8 +54,7 @@ class MemoryBank:
         self.queue = self.queue.to(device)
 
         for data, _ in loader:
-            x_k = data[1]
-            x_k = x_k.to(device)
+            x_k = data.to(device)
             k = model_k(x_k)
             k = k.detach()
             self.queue = self.queue_data(k)
@@ -77,7 +76,7 @@ class MemoryBank:
 
     def dequeue_and_enqueue(self, k):
         self.queue_data(k)
-        return self.dequeue_data()
+        self.queue = self.dequeue_data()
 
 
 def momentum_update(f_k, f_q, m):

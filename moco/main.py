@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description='Train MoCo')
 # training configs
 parser.add_argument('--lr', default=0.03, type=float, help='initial learning rate')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
-parser.add_argument('--batch_size', default=128, type=int, metavar='N', help='mini-batch size')
+parser.add_argument('--batch_size', default=256, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--wd', default=0.0001, type=float, metavar='W', help='weight decay')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum for optimizer')
 parser.add_argument('--temperature', default=0.07, type=float, help='temperature for loss fn')
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     Path(args.check_point.split('/')[0]).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 
-    f_q = MoCo(args).to(device)
+    f_q = MoCo(args).cuda()
     f_k = get_momentum_encoder(f_q)
 
     criterion = MoCoLoss(args.temperature)
@@ -87,11 +87,11 @@ if __name__ == '__main__':
     memo_bank = MemoryBank(f_k, device, train_loader, args.K)
     writer = SummaryWriter(args.logs_root)
 
-    pbar = tqdm(args.epochs)
+    pbar = tqdm(range(args.epochs))
     for epoch in pbar:
         train_losses = []
         for x1, x2 in train_loader:
-            x1, x2 = x1.to(device), x2.to(device)
+            x1, x2 = x1.cuda(), x2.cuda()
             q1, q2 = f_q(x1), f_q(x2)
             with torch.no_grad():
                 k1, k2 = f_k(x1), f_k(x2)
@@ -112,7 +112,7 @@ if __name__ == '__main__':
 
         feature_bank, feature_labels = [], []
         for data, target in momentum_loader:
-            data = data.to(device)
+            data = data.cuda()
             with torch.no_grad():
                 features = f_q(data)
             feature_bank.append(features)
@@ -125,7 +125,7 @@ if __name__ == '__main__':
 
         y_preds, y_trues = [], []
         for data, target in test_loader:
-            data = data.to(device)
+            data = data.cuda()
             with torch.no_grad():
                 feature = f_q(data).cpu().numpy()
             y_preds.extend(linear_classifier.predict(feature).tolist())
