@@ -1,6 +1,6 @@
 from torch import nn
 import torch
-from networks.layers import ConvNormAct, ResBlock
+from networks.layers import ConvNormAct, ResBlock, Reshape
 
 
 class VAE(nn.Module):
@@ -17,6 +17,15 @@ class VAE(nn.Module):
             nn.Linear((args.img_size // (2**4))**2 * args.model_dim * 8, args.z_dim * 2)
         )
         self.decoder = nn.Sequential(
+            nn.Linear(args.z_dim, (args.img_size // (2**4))**2 * args.model_dim * 8),
+            nn.BatchNorm1d((args.img_size // (2**4))**2 * args.model_dim * 8),
+            nn.ReLU(),
+            Reshape(
+                args.batch_size,
+                args.model_dim * 8,
+                args.img_size // (2**4),
+                args.img_size // (2**4)
+            ),
             ConvNormAct(args.model_dim * 8, args.model_dim * 4, 'up'),
             ConvNormAct(args.model_dim * 4, args.model_dim * 2, 'up'),
             ConvNormAct(args.model_dim * 2, args.model_dim, 'up'),

@@ -81,3 +81,12 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         return self.resblock(x)
+
+
+class Reshape(nn.Module):
+    def __init__(self, *args):
+        super().__init__()
+        self.shape = args
+
+    def forward(self, x):
+        return x.view(self.shape)
