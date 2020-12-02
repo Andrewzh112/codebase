@@ -14,11 +14,12 @@ class MoCoLoss(nn.Module):
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, q, k, memo_bank):
+        N = q.size(0)
         k = k.detach()
         pos_logits = torch.einsum('ij,ij->i', [q, k]).unsqueeze(-1)
-        neg_logits = torch.einsum('ij,jk->ik', [q, memo_bank.queue.clone()])
+        neg_logits = torch.einsum('ij,kj->ik', [q, memo_bank.queue.clone()])
         logits = torch.cat([pos_logits, neg_logits], dim=1)
-        labels = torch.zeros_like(logits, dtype=torch.long, device=logits.device)
+        labels = torch.zeros(N, dtype=torch.long, device=logits.device)
         return self.criterion(logits / self.T, labels)
 
 
@@ -75,7 +76,7 @@ class MemoryBank:
             return self.queue
 
     def dequeue_and_enqueue(self, k):
-        self.queue_data(k)
+        self.queue = self.queue_data(k)
         self.queue = self.dequeue_data()
 
 

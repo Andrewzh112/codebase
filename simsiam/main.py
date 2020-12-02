@@ -33,14 +33,10 @@ parser.add_argument('--hidden_dim', default=2048, type=int, help='feature dimens
 parser.add_argument('--bottleneck_dim', default=512, type=int, help='bottleneck dimension')
 parser.add_argument('--num_encoder_fcs', default=2, type=int, help='number of layers of fcs for encoder')
 
-# knn monitor
-parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
-parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor')
-
 # misc.
-parser.add_argument('--data_root', default='../data', type=str, help='path to data')
-parser.add_argument('--logs_root', default='logs', type=str, help='path to logs')
-parser.add_argument('--check_point', default='check_point/simsiam.pth', type=str, help='path to model weights')
+parser.add_argument('--data_root', default='data', type=str, help='path to data')
+parser.add_argument('--logs_root', default='simsiam/logs', type=str, help='path to logs')
+parser.add_argument('--check_point', default='simsiam/check_point/simsiam.pth', type=str, help='path to model weights')
 
 args = parser.parse_args()
 
@@ -82,8 +78,8 @@ if __name__ == '__main__':
 
     writer = SummaryWriter(args.logs_root)
     model = SimSiam(args).to(device)
-    Path(args.check_point.split('/')[0]).mkdir(parents=True, exist_ok=True)
-    Path(args.logs_root).mkdir(parents=True, exist_ok=True)
+    Path(args.check_point.split('/')[1]).mkdir(parents=True, exist_ok=True)
+    Path(args.logs_root.split('/')[1]).mkdir(parents=True, exist_ok=True)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)

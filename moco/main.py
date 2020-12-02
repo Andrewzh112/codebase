@@ -37,9 +37,9 @@ parser.add_argument('--feature_dim', default=128, type=int, help='feature dimens
 parser.add_argument('--mlp', default=True, type=bool, help='feature dimension')
 
 # misc.
-parser.add_argument('--data_root', default='../data', type=str, help='path to data')
-parser.add_argument('--logs_root', default='logs', type=str, help='path to logs')
-parser.add_argument('--check_point', default='check_point/moco.pth', type=str, help='path to model weights')
+parser.add_argument('--data_root', default='data', type=str, help='path to data')
+parser.add_argument('--logs_root', default='moco/logs', type=str, help='path to logs')
+parser.add_argument('--check_point', default='moco/check_point/moco.pth', type=str, help='path to model weights')
 
 args = parser.parse_args()
 
@@ -73,8 +73,8 @@ if __name__ == '__main__':
     test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
 
-    Path(args.check_point.split('/')[0]).mkdir(parents=True, exist_ok=True)
-    Path(args.logs_root).mkdir(parents=True, exist_ok=True)
+    Path(args.check_point.split('/')[1]).mkdir(parents=True, exist_ok=True)
+    Path(args.logs_root.split('/')[1]).mkdir(parents=True, exist_ok=True)
 
     f_q = MoCo(args).cuda()
     f_k = get_momentum_encoder(f_q)
@@ -104,7 +104,7 @@ if __name__ == '__main__':
             with torch.no_grad():
                 momentum_update(f_k, f_q, args.m)
             train_losses.append(loss.item())
-            pbar.set_postfix({'Loss': loss.item(), 'Learning Rate': scheduler.get_last_lr()})
+            pbar.set_postfix({'Loss': loss.item(), 'Learning Rate': scheduler.get_last_lr()[0]})
 
         writer.add_scalar('Train Loss', sum(train_losses) / len(train_losses), global_step=epoch)
         torch.save(f_q.state_dict(), args.check_point)
