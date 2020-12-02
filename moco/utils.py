@@ -54,9 +54,9 @@ class MemoryBank:
         self.queue = torch.zeros((0, 128), dtype=torch.float) 
         self.queue = self.queue.to(device)
 
-        for data, _ in loader:
-            x_k = data.to(device)
-            k = model_k(x_k)
+        for x, _ in loader:
+            x = x.to(device)
+            k = model_k(x)
             k = k.detach()
             self.queue = self.queue_data(k)
             self.queue = self.dequeue_data(10)

@@ -29,10 +29,10 @@ parser.add_argument('--sample_batches', type=int, default=25, help='How many gen
 parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
 parser.add_argument('--lambda_identity', type=float, default=0.1, help='Identity loss weight')
 parser.add_argument('--lambda_cycle', type=float, default=10., help='Cycle loss weight')
-parser.add_argument('--log_dir', type=str, default='logs', help='Path to where log files will be saved')
-parser.add_argument('--save_img_dir', type=str, default='save_images', help='Path to where generated images will be saved')
-parser.add_argument('--data_root', type=str, default='horse2zebra', help='Path to where image data is located')
-parser.add_argument('--checkpoint_dir', type=str, default='model_weights', help='Path to where model weights will be saved')
+parser.add_argument('--log_dir', type=str, default='cyclegan/logs', help='Path to where log files will be saved')
+parser.add_argument('--save_img_dir', type=str, default='cyclegan/save_images', help='Path to where generated images will be saved')
+parser.add_argument('--data_root', type=str, default='data/horse2zebra', help='Path to where image data is located')
+parser.add_argument('--checkpoint_dir', type=str, default='cyclegan/model_weights', help='Path to where model weights will be saved')
 args = parser.parse_args()
 
 

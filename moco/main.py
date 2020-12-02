@@ -43,7 +43,7 @@ parser.add_argument('--check_point', default='moco/check_point/moco.pth', type=s
 
 args = parser.parse_args()
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 if __name__ == '__main__':
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     Path(args.check_point.split('/')[1]).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root.split('/')[1]).mkdir(parents=True, exist_ok=True)
 
-    f_q = MoCo(args).cuda()
+    f_q = torch.nn.DataParallel(MoCo(args), device_ids=[0, 1]).to(device)
     f_k = get_momentum_encoder(f_q)
 
     criterion = MoCoLoss(args.temperature)
@@ -91,7 +91,6 @@ if __name__ == '__main__':
     for epoch in pbar:
         train_losses = []
         for x1, x2 in train_loader:
-            x1, x2 = x1.cuda(), x2.cuda()
             q1, q2 = f_q(x1), f_q(x2)
             with torch.no_grad():
                 k1, k2 = f_k(x1), f_k(x2)
@@ -112,7 +111,6 @@ if __name__ == '__main__':
 
         feature_bank, feature_labels = [], []
         for data, target in momentum_loader:
-            data = data.cuda()
             with torch.no_grad():
                 features = f_q(data)
             feature_bank.append(features)
@@ -125,7 +123,6 @@ if __name__ == '__main__':
 
         y_preds, y_trues = [], []
         for data, target in test_loader:
-            data = data.cuda()
             with torch.no_grad():
                 feature = f_q(data).cpu().numpy()
             y_preds.extend(linear_classifier.predict(feature).tolist())
@@ -133,7 +130,8 @@ if __name__ == '__main__':
         y_trues = torch.cat(y_trues, dim=0).numpy()
         top1acc = accuracy_score(y_trues, y_preds) * 100
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
-
+        writer.add_scalar('Representation Standard Deviation', feature_bank.std(), global_step=epoch)
         tqdm.write(f'Epoch: {epoch + 1}/{args.epochs}, \
                 Training Loss: {sum(train_losses) / len(train_losses)}, \
-                Top Accuracy @ 1: {top1acc}')
+                Top Accuracy @ 1: {top1acc}, \
+                Representation STD: {feature_bank.std()}')
