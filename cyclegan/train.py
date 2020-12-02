@@ -5,9 +5,9 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 import itertools
 from tqdm import tqdm
-from data import CycleImageDataset
-from models import Generator, Discriminator, set_requires_grad
-from utils import ReplayBuffer, LambdaLR, make_images, get_random_ids
+from cyclegan.data import CycleImageDataset
+from cyclegan.models import Generator, Discriminator, set_requires_grad
+from cyclegan.utils import ReplayBuffer, LambdaLR, make_images, get_random_ids
 
 
 parser = argparse.ArgumentParser()

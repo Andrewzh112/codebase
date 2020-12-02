@@ -14,8 +14,8 @@ from tqdm import tqdm
 from pathlib import Path
 from warnings import simplefilter
 
-from model import SimSiam
-from data import GaussianBlur, CIFAR10Pairs
+from simsiam.model import SimSiam
+from simsiam.data import GaussianBlur, CIFAR10Pairs
 
 simplefilter(action='ignore', category=ConvergenceWarning)
 parser = argparse.ArgumentParser(description='Train SimSiam')

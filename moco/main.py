@@ -14,9 +14,9 @@ from tqdm import tqdm
 from pathlib import Path
 from warnings import simplefilter
 
-from model import MoCo
-from utils import (GaussianBlur, CIFAR10Pairs, MoCoLoss,
-                   MemoryBank, momentum_update, get_momentum_encoder)
+from moco.model import MoCo
+from moco.utils import (GaussianBlur, CIFAR10Pairs, MoCoLoss,
+                        MemoryBank, momentum_update, get_momentum_encoder)
 
 simplefilter(action='ignore', category=ConvergenceWarning)
 parser = argparse.ArgumentParser(description='Train MoCo')

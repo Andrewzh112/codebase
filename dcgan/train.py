@@ -5,8 +5,8 @@ from tqdm import tqdm
 import os
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
-from data import get_loaders
-from models import Generator, Discriminator
+from dcgan.data import get_loaders
+from dcgan.models import Generator, Discriminator
 
 
 parser = argparse.ArgumentParser()
