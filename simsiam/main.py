@@ -122,7 +122,7 @@ if __name__ == '__main__':
         linear_classifier.fit(feature_bank, feature_labels)
 
         y_preds, y_trues = [], []
-        for data, target in feature_loader:
+        for data, target in test_loader:
             data = data.to(device)
             with torch.no_grad():
                 feature = model(data, istrain=False)
