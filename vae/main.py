@@ -7,6 +7,7 @@ from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
 
+from networks.utils import initialize_modules
 from vae.data import get_loaders
 from vae.model import VAE
 from vae.loss import VAELoss
@@ -25,7 +26,7 @@ parser.add_argument('--beta', type=float, default=1., help='Beta hyperparam for 
 parser.add_argument('--recon', type=str, default='bce', help='Reconstruction loss type [bce, l2]')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
-parser.add_argument('--sample_size', type=int, default=32, help='Size of sampled images')
+parser.add_argument('--sample_size', type=int, default=64, help='Size of sampled images')
 parser.add_argument('--log_dir', type=str, default='vae/logs', help='Path to where log files will be saved')
 parser.add_argument('--data_path', type=str, default='data/img_align_celeba', help='Path to where image data is located')
 parser.add_argument('--device_ids', type=list, default=[0, 1], help='List of GPU devices')
@@ -43,19 +44,22 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     model = torch.nn.DataParallel(VAE(args), device_ids=args.device_ids).to(device)
+    model.apply(initialize_modules)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=args.betas)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lambda epoch: 0.995)
     fixed_z = torch.randn(args.sample_size, args.z_dim).to(device)
     criterion = VAELoss(args)
     pbar = tqdm(range(args.n_epochs))
     for epoch in pbar:
-        losses = []
+        losses, kdls, rls = [], [], []
         model.train()
         for img in loader:
             x = img.to(device)
             x_hat, mu, logvar = model(x)
             loss, recon_loss, kld_loss = criterion(x, x_hat, mu, logvar)
             losses.append(loss.item())
+            kdls.append(kld_loss.item())
+            rls.append(recon_loss.item())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -65,6 +69,9 @@ if __name__ == '__main__':
 
         # logging & generating imgs from fixed vector
         writer.add_scalar('Loss', sum(losses) / len(losses), global_step=epoch)
+        writer.add_scalar('KLD Loss', sum(kdls) / len(kdls), global_step=epoch)
+        writer.add_scalar('Reconstruction Loss', sum(rls) / len(rls), global_step=epoch)
+
         model.eval()
         with torch.no_grad():
             sampled_images = model.module.sample(fixed_z)
