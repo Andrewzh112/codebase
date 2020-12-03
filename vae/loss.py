@@ -3,12 +3,12 @@ import torch
 
 
 class VAELoss(nn.Module):
-    def __init__(self, args):
+    def __init__(self, recon=None):
         super().__init__()
-        if args.recon == 'l1':
-            self.recon = nn.L1Loss()
-        elif args.recon == 'l2':
+        if recon == 'l2':
             self.recon = nn.MSELoss()
+        else:
+            self.recon = nn.L1Loss()
 
     def _KL_Loss(self, mu, logvar):
         return torch.mean(-0.5 * torch.sum(1 + logvar - mu ** 2 - logvar.exp(), dim=1), dim=0)

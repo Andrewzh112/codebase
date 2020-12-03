@@ -79,7 +79,7 @@ if __name__ == '__main__':
     writer = SummaryWriter(args.logs_root)
     model = SimSiam(args).to(device)
     Path(args.check_point.split('/')[1]).mkdir(parents=True, exist_ok=True)
-    Path(args.logs_root.split('/')[1]).mkdir(parents=True, exist_ok=True)
+    Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)

@@ -69,7 +69,7 @@ class ResBlock(nn.Module):
                 padding=1,
             ),
             norm,
-            activation,
+            act,
             nn.Conv2d(
                 in_channels,
                 in_channels,
