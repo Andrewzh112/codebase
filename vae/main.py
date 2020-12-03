@@ -15,12 +15,14 @@ from vae.loss import VAELoss
 parser = argparse.ArgumentParser()
 parser.add_argument('--img_channels', type=int, default=3, help='Numer of channels for images')
 parser.add_argument('--model_dim', type=float, default=128, help='model dimensions multiplier')
-parser.add_argument('--z_dim', type=float, default=300, help='dimension of random noise latent vector')
+parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')
 parser.add_argument('--img_size', type=int, default=64, help='H, W of the input images')
 parser.add_argument('--crop_size', type=int, default=128, help='H, W of the input images')
 parser.add_argument('--n_res_blocks', type=int, default=1, help='Number of ResNet Blocks for generators')
 parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for generators')
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
+parser.add_argument('--beta', type=float, default=1., help='Beta hyperparam for KLD Loss')
+parser.add_argument('--recon', type=str, default='bce', help='Reconstruction loss type [bce, l2]')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
 parser.add_argument('--sample_size', type=int, default=32, help='Size of sampled images')
@@ -45,18 +47,20 @@ if __name__ == '__main__':
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lambda epoch: 0.995)
     fixed_z = torch.randn(args.sample_size, args.z_dim).to(device)
     criterion = VAELoss(args)
-
-    for epoch in tqdm(range(args.n_epochs)):
+    pbar = tqdm(range(args.n_epochs))
+    for epoch in pbar:
         losses = []
         model.train()
         for img in loader:
             x = img.to(device)
             x_hat, mu, logvar = model(x)
-            loss = criterion(x, x_hat, mu, logvar)
+            loss, recon_loss, kld_loss = criterion(x, x_hat, mu, logvar)
             losses.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            pbar.set_postfix({'KLD Loss': kld_loss.item(),
+                              'Reconstruction Loss': recon_loss.item()})
         scheduler.step()
 
         # logging & generating imgs from fixed vector
