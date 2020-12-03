@@ -63,7 +63,9 @@ if __name__ == '__main__':
         with torch.no_grad():
             sampled_images = model.sample(fixed_z)
         sampled_images = ((sampled_images + 1) / 2).view(-1, args.img_channels, args.img_size, args.img_size)
-        writer.add_image('Generated Images', torchvision.utils.make_grid(sampled_images), global_step=epoch)
+        writer.add_image('Fixed Generated Images', torchvision.utils.make_grid(sampled_images), global_step=epoch)
+        writer.add_image('Reconstructed Images', torchvision.utils.make_grid(x_hat.detach()), global_step=epoch)
+        writer.add_image('Original Images', torchvision.utils.make_grid(x.detach()), global_step=epoch)
         tqdm.write(
             f'Epoch {epoch + 1}/{args.n_epochs}, \
                 Loss: {sum(losses) / len(losses):.3f}'
