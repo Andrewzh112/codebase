@@ -11,11 +11,11 @@ class VAELoss(nn.Module):
             self.recon = nn.BCELoss(reduction='sum')
         self.beta = beta
 
-    def _KL_Loss(self, mu, logvar):
-        KDL_batch = mu ** 2 + (logvar - logvar.exp() + 1)
-        return self.beta / 2 * torch.sum(KDL_batch, dim=0)
+    def _KLD_Loss(self, mu, logvar):
+        KDL_batch = logvar.exp() - logvar - 1 + mu.pow(2)
+        return self.beta / 2 * torch.sum(KDL_batch)
 
     def forward(self, x, x_hat, mu, logvar):
         reconstruction_loss = self.recon(x_hat, x)
-        kl_loss = self._KL_Loss(mu, logvar)
-        return reconstruction_loss + kl_loss
+        kld_loss = self._KLD_Loss(mu, logvar)
+        return reconstruction_loss + kld_loss

@@ -18,8 +18,8 @@ parser.add_argument('--model_dim', type=float, default=128, help='model dimensio
 parser.add_argument('--z_dim', type=float, default=300, help='dimension of random noise latent vector')
 parser.add_argument('--img_size', type=int, default=64, help='H, W of the input images')
 parser.add_argument('--crop_size', type=int, default=128, help='H, W of the input images')
-parser.add_argument('--n_res_blocks', type=int, default=0, help='Number of ResNet Blocks for generators')
-parser.add_argument('--lr', type=float, default=0.0002, help='Learning rate for generators')
+parser.add_argument('--n_res_blocks', type=int, default=1, help='Number of ResNet Blocks for generators')
+parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for generators')
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
@@ -52,7 +52,6 @@ if __name__ == '__main__':
         for img in loader:
             x = img.to(device)
             x_hat, mu, logvar = model(x)
-            print(x_hat.device, x.device)
             loss = criterion(x, x_hat, mu, logvar)
             losses.append(loss.item())
             optimizer.zero_grad()

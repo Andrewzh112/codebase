@@ -27,7 +27,7 @@ class VAE(nn.Module):
             ConvNormAct(args.model_dim * 4, args.model_dim * 2, 'up', activation='lrelu'),
             ConvNormAct(args.model_dim * 2, args.model_dim, 'up', activation='lrelu'),
             ConvNormAct(args.model_dim, args.img_channels, 'up', activation='lrelu'),
-            nn.Tanh()
+            nn.Sigmoid()
         )
 
     def reparameterize(self, mu, logvar):
