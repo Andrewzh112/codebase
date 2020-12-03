@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     model = torch.nn.DataParallel(VAE(args), device_ids=args.device_ids).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=args.betas)
-    scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lambda epoch: 0.95)
+    scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lambda epoch: 0.995)
     fixed_z = torch.randn(args.sample_size, args.z_dim).to(device)
     criterion = VAELoss(args)
 
@@ -61,14 +61,15 @@ if __name__ == '__main__':
         # logging & generating imgs from fixed vector
         writer.add_scalar('Loss', sum(losses) / len(losses), global_step=epoch)
         with torch.no_grad():
-            sampled_images = model.sample(fixed_z)
+            sampled_images = model.module.sample(fixed_z)
         sampled_images = ((sampled_images + 1) / 2).view(-1, args.img_channels, args.img_size, args.img_size)
         writer.add_image('Fixed Generated Images', torchvision.utils.make_grid(sampled_images), global_step=epoch)
         writer.add_image('Reconstructed Images', torchvision.utils.make_grid(x_hat.detach()), global_step=epoch)
         writer.add_image('Original Images', torchvision.utils.make_grid(x.detach()), global_step=epoch)
         tqdm.write(
             f'Epoch {epoch + 1}/{args.n_epochs}, \
-                Loss: {sum(losses) / len(losses):.3f}'
+                Loss: {sum(losses) / len(losses):.3f}, \
+                    Learning Rate: {scheduler.get_last_lr()[0]}'
         )
         torch.save({
                     'model': model.state_dict(),
