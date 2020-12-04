@@ -8,6 +8,7 @@ import math
 
 
 class CIFAR10Pairs(CIFAR10):
+    """Outputs two versions of same image through two different transforms"""
     def __getitem__(self, index):
         img = self.data[index]
         img = Image.fromarray(img)

@@ -73,7 +73,7 @@ if __name__ == '__main__':
     test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
 
-    Path(args.check_point.split('/')[1]).mkdir(parents=True, exist_ok=True)
+    Path('/'.join(args.check_point.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 
     f_q = torch.nn.DataParallel(MoCo(args), device_ids=[0, 1]).to(device)

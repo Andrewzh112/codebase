@@ -1,6 +1,8 @@
 """https://github.com/facebookresearch/moco"""
 
+import torch
 from torch import nn
+from torch.nn import functional as F
 import torchvision
 
 
@@ -49,3 +51,8 @@ class SimSiam(nn.Module):
             return z1, z2, p1, p2
         else:
             return self.encoder(x1)
+
+    def cosine_loss(self, p, z):
+        p = F.normalize(p, dim=1)
+        z = F.normalize(z, dim=1).detach()
+        return -torch.einsum('ij,ij->i', p, z).mean()

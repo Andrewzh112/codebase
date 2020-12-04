@@ -10,22 +10,19 @@ from vae.main import parser, args
 
 
 class Sampler:
-    def __init__(self, sample_path='vae/samples', ext='.jpg'):
+    def __init__(self):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.vae = torch.nn.DataParallel(VAE(args), device_ids=args.device_ids).to(self.device)
         self.vae.load_state_dict(torch.load(f"{args.checkpoint_dir}/VAE.pth")['model'])
         self.vae.eval()
-        Path(sample_path).mkdir(parents=True, exist_ok=True)
-
-        self.sample_path = sample_path
-        self.ext = ext
+        Path(args.sample_path).mkdir(parents=True, exist_ok=True)
 
     def sample(self):
         with torch.no_grad():
             samples = self.vae.module.sample(num_samples=args.sample_size)
         torchvision.utils.save_image(
             samples,
-            self.sample_path + f'/sample_{int(datetime.now().timestamp()*1e6)}' + self.ext)
+            args.sample_path + f'/sample_{int(datetime.now().timestamp()*1e6)}' + args.img_ext)
 
     def generate_walk_z(self):
         z = torch.randn(args.z_dim, device=self.device)
@@ -40,7 +37,7 @@ class Sampler:
             samples = self.vae.module.sample(z=z)
         torchvision.utils.save_image(
             samples,
-            self.sample_path + f'/walk_{int(datetime.now().timestamp()*1e6)}' + self.ext)
+            args.sample_path + f'/walk_{int(datetime.now().timestamp()*1e6)}' + args.img_ext)
 
 
 if __name__ == '__main__':

@@ -26,6 +26,8 @@ parser.add_argument('--epochs', default=800, type=int, metavar='N', help='number
 parser.add_argument('--batch_size', default=128, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--wd', default=5e-4, type=float, metavar='W', help='weight decay')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum for optimizer')
+parser.add_argument('--symmetric', action="store_true", default=True, help='loss function is symmetric')
+parser.add_argument('--device_ids', type=list, default=[0, 1], help='List of GPU devices')
 
 # simsiam model configs
 parser.add_argument('-a', '--backbone', default='resnet18')
@@ -41,12 +43,6 @@ parser.add_argument('--check_point', default='simsiam/check_point/simsiam.pth', 
 args = parser.parse_args()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-def cosine_loss(p, z):
-        z = z.detach()
-        p = F.normalize(p, dim=1)
-        z = F.normalize(z, dim=1)
-        return -(p @ z.T).mean()
 
 
 if __name__ == '__main__':
@@ -77,8 +73,8 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
 
     writer = SummaryWriter(args.logs_root)
-    model = SimSiam(args).to(device)
-    Path(args.check_point.split('/')[1]).mkdir(parents=True, exist_ok=True)
+    model = torch.nn.DataParallel(SimSiam(args), device_ids=args.device_ids).to(device)
+    Path('/'.join(args.check_point.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
@@ -92,8 +88,10 @@ if __name__ == '__main__':
         for x1, x2 in train_loader:
             x1, x2 = x1.to(device), x2.to(device)
             z1, z2, p1, p2 = model(x1, x2)
-            # symmetric loss
-            loss = (cosine_loss(p1, z2) + cosine_loss(p2, z1)) / 2
+            if args.symmetric:
+                loss = (model.module.cosine_loss(p1, z2) + model.module.cosine_loss(p2, z1)) / 2
+            else:
+                loss = model.module.cosine_loss(p1, z2)
             train_losses.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
@@ -134,7 +132,7 @@ if __name__ == '__main__':
             f'Epoch {epoch + 1}/{args.epochs}, \
                 Train Loss: {sum(train_losses) / len(train_losses):.3f}, \
                 Top Acc @ 1: {top1acc:.3f}, \
-                Learning Rate: {scheduler.get_last_lr()}'
+                Learning Rate: {scheduler.get_last_lr()[0]}'
         )
         torch.save(model.state_dict(), args.check_point)
         scheduler.step()
