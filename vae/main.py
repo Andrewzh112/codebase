@@ -14,6 +14,7 @@ from vae.loss import VAELoss
 
 
 parser = argparse.ArgumentParser()
+# training
 parser.add_argument('--img_channels', type=int, default=3, help='Numer of channels for images')
 parser.add_argument('--model_dim', type=float, default=128, help='model dimensions multiplier')
 parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')
@@ -32,6 +33,10 @@ parser.add_argument('--data_path', type=str, default='data/img_align_celeba', he
 parser.add_argument('--device_ids', type=list, default=[0, 1], help='List of GPU devices')
 parser.add_argument('--img_ext', type=str, default='.jpg', help='Image extentions')
 parser.add_argument('--checkpoint_dir', type=str, default='vae/model_weights', help='Path to where model weights will be saved')
+
+# for sampler
+parser.add_argument('--sample', action="store_true", default=False, help='Sample from VAE')
+parser.add_argument('--walk', action="store_true", default=False, help='Walk through a feature & sample')
 args = parser.parse_args()
 
 

@@ -46,7 +46,7 @@ class VAE(nn.Module):
 
     def sample(self, z=None, num_samples=50):
         if z is None:
-            z = torch.randn(num_samples, self.args.z_dim, device=self.device)
+            z = torch.randn(num_samples, self.args.z_dim, device=next(self.parameters()).device)
         z = self.projector(z).view(-1, self.args.model_dim * 8,
                                    self.args.img_size // (2**4), self.args.img_size // (2**4))
         return self.decoder(z)
