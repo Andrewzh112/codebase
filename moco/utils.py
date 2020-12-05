@@ -19,7 +19,9 @@ class MoCoLoss(nn.Module):
         pos_logits = torch.einsum('ij,ij->i', [q, k]).unsqueeze(-1)
         neg_logits = torch.einsum('ij,kj->ik', [q, memo_bank.queue.clone()])
         logits = torch.cat([pos_logits, neg_logits], dim=1)
-        labels = torch.zeros(N, dtype=torch.long, device=logits.device)
+    
+        # zero is the positive "class"
+        labels = torch.new_zeros(N)
         return self.criterion(logits / self.T, labels)
 
 
@@ -54,10 +56,10 @@ class MemoryBank:
         self.queue = torch.zeros((0, 128), dtype=torch.float) 
         self.queue = self.queue.to(device)
 
+        # initialize Q with 10 datapoints
         for x, _ in loader:
             x = x.to(device)
             k = model_k(x)
-            k = k.detach()
             self.queue = self.queue_data(k)
             self.queue = self.dequeue_data(10)
             break

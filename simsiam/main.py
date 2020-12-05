@@ -126,6 +126,7 @@ if __name__ == '__main__':
         y_trues = torch.cat(y_trues, dim=0).numpy()
         top1acc = accuracy_score(y_trues, y_preds) * 100
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
+        writer.add_scalar('Representation Standard Deviation', feature_bank.std(), global_step=epoch)
 
         tqdm.write('#########################################################')
         tqdm.write(

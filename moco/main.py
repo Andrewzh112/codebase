@@ -84,7 +84,7 @@ if __name__ == '__main__':
                                 momentum=args.momentum, weight_decay=args.wd)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer,
                                                           lambda epoch: 0.1 if epoch in (120, 160) else 1)
-    memo_bank = MemoryBank(f_k, device, train_loader, args.K)
+    memo_bank = MemoryBank(f_k, device, momentum_loader, args.K)
     writer = SummaryWriter(args.logs_root)
 
     pbar = tqdm(range(args.epochs))
@@ -116,7 +116,7 @@ if __name__ == '__main__':
             feature_bank.append(features)
             feature_labels.append(target)
         feature_bank = torch.cat(feature_bank).cpu().numpy()
-        feature_labels = torch.cat(feature_labels).cpu().numpy()
+        feature_labels = torch.cat(feature_labels).numpy()
 
         linear_classifier = LogisticRegression()
         linear_classifier.fit(feature_bank, feature_labels)
