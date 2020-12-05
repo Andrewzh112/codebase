@@ -12,6 +12,7 @@ from sklearn.exceptions import ConvergenceWarning
 import argparse
 from tqdm import tqdm
 from pathlib import Path
+from datetime import datetime
 from warnings import simplefilter
 
 from moco.model import MoCo
@@ -85,7 +86,7 @@ if __name__ == '__main__':
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer,
                                                           lambda epoch: 0.1 if epoch in (120, 160) else 1)
     memo_bank = MemoryBank(f_k, device, momentum_loader, args.K)
-    writer = SummaryWriter(args.logs_root)
+    writer = SummaryWriter(args.logs_root + f'/{int(datetime.now().timestamp()*1e6)}')
 
     pbar = tqdm(range(args.epochs))
     for epoch in pbar:

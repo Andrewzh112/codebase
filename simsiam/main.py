@@ -13,6 +13,7 @@ import argparse
 from tqdm import tqdm
 from pathlib import Path
 from warnings import simplefilter
+from datetime import datetime
 
 from simsiam.model import SimSiam
 from simsiam.data import GaussianBlur, CIFAR10Pairs
@@ -72,7 +73,7 @@ if __name__ == '__main__':
     test_data = CIFAR10(root=args.data_root, train=False, transform=test_transform, download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
 
-    writer = SummaryWriter(args.logs_root)
+    writer = SummaryWriter(args.logs_root + f'/{int(datetime.now().timestamp()*1e6)}')
     model = torch.nn.DataParallel(SimSiam(args), device_ids=args.device_ids).to(device)
     Path('/'.join(args.check_point.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root).mkdir(parents=True, exist_ok=True)
