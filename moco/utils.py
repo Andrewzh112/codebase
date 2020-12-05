@@ -19,9 +19,9 @@ class MoCoLoss(nn.Module):
         pos_logits = torch.einsum('ij,ij->i', [q, k]).unsqueeze(-1)
         neg_logits = torch.einsum('ij,kj->ik', [q, memo_bank.queue.clone()])
         logits = torch.cat([pos_logits, neg_logits], dim=1)
-    
+
         # zero is the positive "class"
-        labels = torch.new_zeros(N)
+        labels = logits.new_zeros(N, dtype=torch.long)
         return self.criterion(logits / self.T, labels)
 
 

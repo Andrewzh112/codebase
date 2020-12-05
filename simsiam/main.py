@@ -113,7 +113,7 @@ if __name__ == '__main__':
         feature_bank = torch.cat(feature_bank, dim=0).cpu().numpy()
         feature_labels = torch.cat(targets, dim=0).numpy()
 
-        linear_classifier = LogisticRegression()
+        linear_classifier = LogisticRegression(multi_class='multinomial', solver='lbfgs')
         linear_classifier.fit(feature_bank, feature_labels)
 
         y_preds, y_trues = [], []
