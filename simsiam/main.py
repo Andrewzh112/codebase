@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
         model.eval()
         feature_bank, targets = [], []
-        # get current featuremaps & fit LR
+        # get current feature maps & fit LR
         for data, target in feature_loader:
             data = data.to(device)
             with torch.no_grad():
