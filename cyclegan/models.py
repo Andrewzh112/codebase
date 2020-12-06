@@ -1,4 +1,5 @@
 from torch import nn
+from torch.nn import init
 
 
 class ResBlock(nn.Module):
@@ -52,6 +53,29 @@ def set_requires_grad(nets, requires_grad=False):
             if net is not None:
                 for param in net.parameters():
                     param.requires_grad = requires_grad
+
+
+def init_weights(model, init_type='normal', init_gain=0.02):
+    """https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py"""
+    def init_func(m):
+        classname = m.__class__.__name__
+        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+            if init_type == 'normal':
+                init.normal_(m.weight.data, 0.0, init_gain)
+            elif init_type == 'xavier':
+                init.xavier_normal_(m.weight.data, gain=init_gain)
+            elif init_type == 'kaiming':
+                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+            elif init_type == 'orthogonal':
+                init.orthogonal_(m.weight.data, gain=init_gain)
+            else:
+                raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
+            if hasattr(m, 'bias') and m.bias is not None:
+                init.constant_(m.bias.data, 0.0)
+        elif classname.find('BatchNorm2d') != -1:
+            init.normal_(m.weight.data, 1.0, init_gain)
+            init.constant_(m.bias.data, 0.0)
+    model.apply(init_func)
 
 
 class Generator(nn.Module):
@@ -122,7 +146,7 @@ class Generator(nn.Module):
             ),
             nn.Tanh()
         )
-        initialize_weights(self, nonlinearity='relu')
+        init_weights(self)
 
     def forward(self, x):
         return self.gen(x)
@@ -175,7 +199,7 @@ class Discriminator(nn.Module):
                 stride=1,
             )
         )
-        initialize_weights(self)
+        init_weights(self)
 
     def forward(self, x):
         return self.disc(x) 

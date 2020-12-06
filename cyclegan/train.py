@@ -21,7 +21,7 @@ parser.add_argument('--lr_D', type=float, default=0.0002, help='Learning rate fo
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
 parser.add_argument('--starting_epoch', type=int, default=0, help='Starting epoch for resuming training')
-parser.add_argument('--decay_epoch', type=int, default=100, help='Starting epoch when learning rate will start decay')
+parser.add_argument('--decay_epoch', type=int, default=50, help='Starting epoch when learning rate will start decay')
 parser.add_argument('--load_shape', type=int, default=256, help='Initial image H or W')
 parser.add_argument('--target_shape', type=int, default=224, help='Final image H or W')
 parser.add_argument('--progress_interval', type=int, default=1, help='Save model and generated image every x epoch')

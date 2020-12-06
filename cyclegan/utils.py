@@ -12,7 +12,7 @@ class LambdaLR:
         self.starting_epoch = starting_epoch
 
     def step(self, epoch):
-        return 1.0 - max(0, epoch + self.starting_epoch - self.decay_epoch)/(self.n_epochs - self.decay_epoch)
+        return 1.0 - max(0, epoch + self.starting_epoch - self.n_epochs)/(self.decay_epoch + 1)
 
 
 class ReplayBuffer:
@@ -45,7 +45,7 @@ class ReplayBuffer:
         return_batch = torch.stack([*buffer_samples, *batch_samples], dim=0)
         self.buffer.extend([*in_batch])
 
-        return return_batch
+        return return_batch[idx]
 
 
 def make_images(image_tensor, size=(3, 224, 224)):
