@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
             # sample from queue
             pool_fake_A = pool_A.sample(fake_A.detach())
-            pool_fake_B = pool_A.sample(fake_B.detach())
+            pool_fake_B = pool_B.sample(fake_B.detach())
             fake_pool_A_logits = D_B(pool_fake_A)
             fake_pool_B_logits = D_B(pool_fake_B)
 
