@@ -45,7 +45,7 @@ class ReplayBuffer:
         return_batch = torch.stack([*buffer_samples, *batch_samples], dim=0)
         self.buffer.extend([*in_batch])
 
-        return return_batch[idx]
+        return return_batch
 
 
 def make_images(image_tensor, size=(3, 224, 224)):
