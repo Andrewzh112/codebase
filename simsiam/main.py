@@ -5,25 +5,20 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn import functional as F
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
-from sklearn.exceptions import ConvergenceWarning
-
 import argparse
 from tqdm import tqdm
 from pathlib import Path
-from warnings import simplefilter
 from datetime import datetime
 
-from simsiam.model import SimSiam
+from simsiam.model import SimSiam, Linear_Classifier
 from simsiam.data import GaussianBlur, CIFAR10Pairs
 
-simplefilter(action='ignore', category=ConvergenceWarning)
 parser = argparse.ArgumentParser(description='Train SimSiam')
 
 # training configs
 parser.add_argument('--lr', default=0.03, type=float, help='initial learning rate')
 parser.add_argument('--epochs', default=800, type=int, metavar='N', help='number of total epochs to run')
+parser.add_argument('--continue_train', action="store_true", default=False, help='continue training')
 parser.add_argument('--batch_size', default=128, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--wd', default=5e-4, type=float, metavar='W', help='weight decay')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum for optimizer')
@@ -80,9 +75,17 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
                                 momentum=args.momentum, weight_decay=args.wd)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, int(args.epochs * 0.005))
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, int(args.epochs * 0.1))
 
-    pbar = tqdm(range(args.epochs))
+    start_epoch = 0
+    if args.continue_train:
+        state_dicts = torch.load(args.check_point)
+        start_epoch = state_dicts['start_epoch']
+        model.load_state_dict(state_dicts['model'])
+        optimizer.load_state_dict(state_dicts['optimizer'])
+        del state_dicts
+
+    pbar = tqdm(range(start_epoch, args.epochs))
     for epoch in pbar:
         model.train()
         train_losses = []
@@ -110,10 +113,10 @@ if __name__ == '__main__':
             feature = F.normalize(feature, dim=1)
             feature_bank.append(feature)
             targets.append(target)
-        feature_bank = torch.cat(feature_bank, dim=0).cpu().numpy()
-        feature_labels = torch.cat(targets, dim=0).numpy()
+        feature_bank = torch.cat(feature_bank, dim=0)
+        feature_labels = torch.cat(targets, dim=0)
 
-        linear_classifier = LogisticRegression(multi_class='multinomial', solver='lbfgs')
+        linear_classifier = Linear_Classifier(args, len(feature_data.classes))
         linear_classifier.fit(feature_bank, feature_labels)
 
         y_preds, y_trues = [], []
@@ -121,11 +124,13 @@ if __name__ == '__main__':
             data = data.to(device)
             with torch.no_grad():
                 feature = model(data, istrain=False)
-            feature = F.normalize(feature, dim=1).cpu().numpy()
-            y_preds.extend(linear_classifier.predict(feature).tolist())
+            feature = F.normalize(feature, dim=1)
+            y_preds.append(linear_classifier.predict(feature))
             y_trues.append(target)
-        y_trues = torch.cat(y_trues, dim=0).numpy()
-        top1acc = accuracy_score(y_trues, y_preds) * 100
+        y_trues = torch.cat(y_trues, dim=0)
+        y_preds = torch.cat(y_preds, dim=0)
+        top1acc = (y_trues == y_preds).sum() / y_preds.size(0)
+
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
         writer.add_scalar('Representation Standard Deviation', feature_bank.std(), global_step=epoch)
 
@@ -136,5 +141,9 @@ if __name__ == '__main__':
                 Top Acc @ 1: {top1acc:.3f}, \
                 Learning Rate: {scheduler.get_last_lr()[0]}'
         )
-        torch.save(model.state_dict(), args.check_point)
+        torch.save({
+            'model': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'start_epoch': epoch + 1},
+            args.check_point)
         scheduler.step()

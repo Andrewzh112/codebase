@@ -2,6 +2,7 @@
 
 from torchvision.datasets import CIFAR10
 from torchvision import transforms
+from torch.utils.data import Dataset, DataLoader
 from PIL import ImageFilter, Image
 import random
 import math
@@ -30,3 +31,16 @@ class GaussianBlur(object):
         sigma = random.uniform(self.sigma[0], self.sigma[1])
         x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
         return x
+
+
+class SimpleDataset(Dataset):
+    def __init__(self, x, y):
+        super().__init__()
+        self.x = torch.tensor(x)
+        self.y = torch.tensor(y)
+
+    def __getitem__(self, idx):
+        return self.x[idx], self.y[idx]
+
+    def __len__(self):
+        return self.x.size(0)
