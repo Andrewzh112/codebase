@@ -1,5 +1,3 @@
-"""https://github.com/facebookresearch/moco"""
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -9,12 +7,15 @@ from simsiam.data import SimpleDataset
 
 
 class Linear_Classifier(nn.Module):
-    def __init__(self, args, num_classes, epochs=2000, lr=1e-3):
+    def __init__(self, args, num_classes, epochs=500, lr=1e-3):
         super().__init__()
         self.fc = nn.Linear(args.hidden_dim, num_classes)
         self.epochs = epochs
         self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.criterion = nn.CrossEntropyLoss()
+        self.scheduler = torch.optim.lr_scheduler.MultiplicativeLR(
+            self.optimizer,
+            lr_lambda=lambda lr: 0.995)
 
     def forward(self, x):
         return self.fc(x)
@@ -33,6 +34,7 @@ class Linear_Classifier(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+            self.scheduler.step()
 
     def predict(self, x):
         self.eval()
@@ -79,8 +81,8 @@ class SimSiam(nn.Module):
             nn.Linear(args.bottleneck_dim, args.hidden_dim),
         )
 
-    def forward(self, x1, x2=None, istrain=True):
-        if istrain:
+    def forward(self, x1, x2=None):
+        if self.training:
             z1, z2 = self.encoder(x1), self.encoder(x2)
             p1, p2 = self.projector(z1), self.projector(z2)
             return z1, z2, p1, p2

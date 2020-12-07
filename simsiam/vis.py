@@ -17,7 +17,7 @@ def get_features(loader, model, device):
     for img, target in loader:
         img = img.to(device)
         with torch.no_grad():
-            feature = model(img, istrain=False)
+            feature = model(img)
         targets.extend(target.cpu().numpy().tolist())
         features.append(feature.cpu())
     features = torch.cat(features).numpy()

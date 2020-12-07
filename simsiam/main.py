@@ -107,11 +107,11 @@ if __name__ == '__main__':
         feature_bank, targets = [], []
         # get current feature maps & fit LR
         for data, target in feature_loader:
-            data = data.to(device)
+            data, target = data.to(device), target.to(device)
             with torch.no_grad():
-                feature = model(data, istrain=False)
+                feature = model(data)
             feature = F.normalize(feature, dim=1)
-            feature_bank.append(feature)
+            feature_bank.append(feature.clone().detach())
             targets.append(target)
         feature_bank = torch.cat(feature_bank, dim=0)
         feature_labels = torch.cat(targets, dim=0)
@@ -121,20 +121,19 @@ if __name__ == '__main__':
 
         y_preds, y_trues = [], []
         for data, target in test_loader:
-            data = data.to(device)
+            data, target = data.to(device), target.to(device)
             with torch.no_grad():
-                feature = model(data, istrain=False)
+                feature = model(data)
             feature = F.normalize(feature, dim=1)
-            y_preds.append(linear_classifier.predict(feature))
+            y_preds.append(linear_classifier.predict(feature.detach()))
             y_trues.append(target)
         y_trues = torch.cat(y_trues, dim=0)
         y_preds = torch.cat(y_preds, dim=0)
-        top1acc = (y_trues == y_preds).sum() / y_preds.size(0)
-
+        top1acc = y_trues.eq(y_preds).sum().item() / y_preds.size(0)
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
         writer.add_scalar('Representation Standard Deviation', feature_bank.std(), global_step=epoch)
 
-        tqdm.write('#########################################################')
+        tqdm.write('###################################################################')
         tqdm.write(
             f'Epoch {epoch + 1}/{args.epochs}, \
                 Train Loss: {sum(train_losses) / len(train_losses):.3f}, \

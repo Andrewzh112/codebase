@@ -36,8 +36,8 @@ class GaussianBlur(object):
 class SimpleDataset(Dataset):
     def __init__(self, x, y):
         super().__init__()
-        self.x = torch.tensor(x)
-        self.y = torch.tensor(y)
+        self.x = x
+        self.y = y
 
     def __getitem__(self, idx):
         return self.x[idx], self.y[idx]
