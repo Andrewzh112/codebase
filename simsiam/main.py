@@ -116,7 +116,7 @@ if __name__ == '__main__':
         feature_bank = torch.cat(feature_bank, dim=0)
         feature_labels = torch.cat(targets, dim=0)
 
-        linear_classifier = Linear_Classifier(args, len(feature_data.classes))
+        linear_classifier = Linear_Classifier(args, len(feature_data.classes)).to(device)
         linear_classifier.fit(feature_bank, feature_labels)
 
         y_preds, y_trues = [], []

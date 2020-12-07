@@ -13,7 +13,7 @@ class Linear_Classifier(nn.Module):
         super().__init__()
         self.fc = nn.Linear(args.hidden_dim, num_classes)
         self.epochs = epochs
-        self.optimizer = torch.optim.Adam(self, lr=lr)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
