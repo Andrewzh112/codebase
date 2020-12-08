@@ -17,7 +17,7 @@ class MoCoLoss(nn.Module):
         N = q.size(0)
         k = k.detach()
         pos_logits = torch.einsum('ij,ij->i', [q, k]).unsqueeze(-1)
-        neg_logits = torch.einsum('ij,kj->ik', [q, memo_bank.queue.clone()])
+        neg_logits = torch.einsum('ij,kj->ik', [q, memo_bank.queue.clone().detach()])
         logits = torch.cat([pos_logits, neg_logits], dim=1)
 
         # zero is the positive "class"
@@ -51,40 +51,36 @@ class GaussianBlur(object):
 
 class MemoryBank:
     """https://github.com/peisuke/MomentumContrast.pytorch"""
-    def __init__(self, model_k, device, loader, K=4096):
+    def __init__(self, f_k, device, loader, K=4096):
         self.K = K
-        self.queue = torch.zeros((0, 128), dtype=torch.float) 
+        self.queue = torch.empty(dtype=torch.float)
         self.queue = self.queue.to(device)
 
-        # initialize Q with 10 datapoints
-        for x, _ in loader:
-            x = x.to(device)
-            k = model_k(x)
-            self.queue = self.queue_data(k)
-            self.queue = self.dequeue_data(10)
-            break
+        # initialize queue with 32 features
+        x, _ = next(iter(loader))
+        x = x.to(device)
+        k = f_k(x)
+        self.dequeue_and_enqueue(k=k, K=32)
 
     def queue_data(self, k):
         k = k.detach()
-        return torch.cat([self.queue, k], dim=0)
+        self.queue = torch.cat([k, self.queue], dim=0)
 
     def dequeue_data(self, K=None):
         if K is None:
             K = self.K
         assert isinstance(K, int)
         if len(self.queue) > K:
-            return self.queue[-K:]
-        else:
-            return self.queue
+            self.queue = self.queue[:K]
 
-    def dequeue_and_enqueue(self, k):
-        self.queue = self.queue_data(k)
-        self.queue = self.dequeue_data()
+    def dequeue_and_enqueue(self, k, K=None):
+        self.queue_data(k)
+        self.dequeue_data(K=K)
 
 
 def momentum_update(f_k, f_q, m):
     for param_q, param_k in zip(f_q.parameters(), f_k.parameters()):
-            param_k.data = param_k.data * m + param_q.data * (1. - m)
+        param_k.data = param_k.data * m + param_q.data * (1. - m)
 
 
 def get_momentum_encoder(f_q):

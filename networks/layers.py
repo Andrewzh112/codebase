@@ -86,21 +86,11 @@ class ResBlock(nn.Module):
         return self.resblock(x)
 
 
-class Reshape(nn.Module):
-    def __init__(self, *args):
-        super().__init__()
-        self.shape = args
-
-    def forward(self, x):
-        return x.view(self.shape)
-
-
 class Linear_Probe(nn.Module):
-    def __init__(self, num_classes, hidden_dim=256, lr=1e-3):
+    def __init__(self, num_classes, in_features=256, lr=30):
         super().__init__()
-        self.fc = nn.Linear(hidden_dim, num_classes)
-        self.optimizer = torch.optim.SGD(self.parameters(), lr=lr,
-                                         momentum=0.9, weight_decay=0.0001)
+        self.fc = nn.Linear(in_features, num_classes)
+        self.optimizer = torch.optim.SGD(self.parameters(), lr=lr, weight_decay=0)
         self.criterion = nn.CrossEntropyLoss()
         self.scheduler = torch.optim.lr_scheduler.MultiplicativeLR(
             self.optimizer,
@@ -112,7 +102,7 @@ class Linear_Probe(nn.Module):
     def loss(self, y_hat, y):
         return self.criterion(y_hat, y)
 
-    def fit(self, x, y, epochs=500):
+    def fit(self, x, y, epochs=100):
         dataset = SimpleDataset(x, y)
         loader = DataLoader(dataset, batch_size=2056, shuffle=True)
         self.train()

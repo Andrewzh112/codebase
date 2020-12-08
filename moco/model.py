@@ -3,13 +3,6 @@ from torch.nn import functional as F
 import torchvision
 from networks.layers import ConvNormAct
 
-class Print(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        print(x.size())
-        return x
 
 class MoCo(nn.Module):
     def __init__(self, args):
@@ -30,17 +23,28 @@ class MoCo(nn.Module):
                 ConvNormAct(3, 32, mode='down'),
                 ConvNormAct(32, 64, mode='down'),
                 ConvNormAct(64, 128, mode='down'),
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten()
+                nn.AdaptiveAvgPool2d(1)
             )
-            self.encoder.fc = nn.Linear(128, 128)
         else:
             raise NotImplementedError
-        fc = [nn.Linear(self.encoder.fc.in_features, args.feature_dim)]
+
+        # disabling last layers, also saving the feature dimension for inference
+        if args.backbone != 'basic':
+            self.encoder.fc = nn.Identity()
+            self.out_features = self.encoder.fc.in_features
+        else:    
+            self.out_features = 128
+
+        # projector after feature extractor
+        fc = [nn.Linear(self.out_features, args.feature_dim)]
         if args.mlp:
             fc.extend([nn.ReLU(), nn.Linear(args.feature_dim, args.feature_dim)])
-        self.encoder.fc = nn.Sequential(*fc)
+        self.projector = nn.Sequential(*fc)
 
     def forward(self, x):
         feature = self.encoder(x)
-        return F.normalize(feature, dim=-1)
+
+        # only project when training, output features otherwise
+        if self.training:
+            feature = self.projector(feature)
+        return F.normalize(feature, dim=1)

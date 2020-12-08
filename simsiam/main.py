@@ -111,7 +111,7 @@ if __name__ == '__main__':
         # extract features as training data
         feature_bank, feature_labels = get_feature_label(model, feature_loader, device, normalize=True)
 
-        linear_classifier = Linear_Probe(len(feature_data.classes), hidden_dim=args.hidden_dim).to(device)
+        linear_classifier = Linear_Probe(len(feature_data.classes), in_features=args.hidden_dim).to(device)
         linear_classifier.fit(feature_bank, feature_labels)
 
         # using linear classifier to predict test data

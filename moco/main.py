@@ -77,6 +77,8 @@ if __name__ == '__main__':
 
     f_q = torch.nn.DataParallel(MoCo(args), device_ids=[0, 1]).to(device)
     f_k = get_momentum_encoder(f_q)
+    for name, _ in f_q.named_modules():
+        print(name)
 
     criterion = MoCoLoss(args.temperature)
     optimizer = torch.optim.SGD(f_q.parameters(), lr=args.lr,
@@ -98,9 +100,12 @@ if __name__ == '__main__':
     pbar = tqdm(range(start_epoch, args.epochs))
     for epoch in pbar:
         train_losses = []
+        f_q.train()
+        f_k.train()
         for x1, x2 in train_loader:
             q1, q2 = f_q(x1), f_q(x2)
             with torch.no_grad():
+                momentum_update(f_k, f_q, args.m)
                 k1, k2 = f_k(x1), f_k(x2)
             loss = criterion(q1, k2, memo_bank) + criterion(q2, k1, memo_bank)
             optimizer.zero_grad()
@@ -108,8 +113,6 @@ if __name__ == '__main__':
             optimizer.step()
             k = torch.cat([k1, k2], dim=0)
             memo_bank.dequeue_and_enqueue(k)
-            with torch.no_grad():
-                momentum_update(f_k, f_q, args.m)
             train_losses.append(loss.item())
             pbar.set_postfix({'Loss': loss.item(), 'Learning Rate': scheduler.get_last_lr()[0]})
 
@@ -118,13 +121,13 @@ if __name__ == '__main__':
 
         f_q.eval()
         # extract features as training data
-        feature_bank, feature_labels = get_feature_label(f_q, momentum_loader, device, normalize=True)
+        feature_bank, feature_labels = get_feature_label(f_q, momentum_loader, device, normalize=False)
 
-        linear_classifier = Linear_Probe(len(momentum_data.classes), hidden_dim=args.feature_dim).to(device)
+        linear_classifier = Linear_Probe(num_classes=len(momentum_data.classes), in_features=f_q.out_features).to(device)
         linear_classifier.fit(feature_bank, feature_labels)
 
         # using linear classifier to predict test data
-        y_preds, y_trues = get_feature_label(f_q, test_loader, device, normalize=True, predictor=linear_classifier)
+        y_preds, y_trues = get_feature_label(f_q, test_loader, device, normalize=False, predictor=linear_classifier)
         top1acc = y_trues.eq(y_preds).sum().item() / y_preds.size(0)
 
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)

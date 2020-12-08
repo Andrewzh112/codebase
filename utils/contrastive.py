@@ -11,9 +11,9 @@ def get_feature_label(feature_extractor, feature_loader, device, normalize=True,
         if normalize:
             feature = F.normalize(feature, dim=1)
         if predictor is None:
-            transformed_features.append(feature.clone())
+            transformed_features.append(feature)
         else:
-            transformed_features.append(predictor.predict(feature.clone()))
+            transformed_features.append(predictor.predict(feature))
         targets.append(target)
     transformed_features = torch.cat(transformed_features, dim=0)
     targets = torch.cat(targets, dim=0)
