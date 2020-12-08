@@ -83,10 +83,10 @@ if __name__ == '__main__':
     start_epoch = 0
     if args.continue_train:
         start_epoch = load_weights(state_dict_path=args.check_point,
-                                   models=[f_q, f_k],
-                                   model_names=['f_q', 'f_k'],
-                                   optimizers=[optimizer],
-                                   optimizer_names=['optimizer'],
+                                   models=model,
+                                   model_names='model',
+                                   optimizers=optimizer,
+                                   optimizer_names='optimizer',
                                    return_val='start_epoch')
 
     pbar = tqdm(range(start_epoch, args.epochs))

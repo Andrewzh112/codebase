@@ -90,6 +90,16 @@ if __name__ == "__main__":
     pool_A = ReplayBuffer()
     pool_B = ReplayBuffer()
 
+    if args.continue_train:
+        args.start_epoch = load_weights(state_dict_path=args.check_point,
+                                        models=[D_A, D_B, G_AB, G_BA],
+                                        model_names=['D_A', 'D_B', 'G_AB', 'G_BA'],
+                                        optimizers=[optimizer_G, optimizer_D],
+                                        optimizer_names=['optimizer_G', 'optimizer_D'],
+                                        return_val='start_epoch')
+
+    pbar = tqdm(range(start_epoch, args.epochs))
+
     pbar = tqdm(
             range(args.starting_epoch, args.n_epochs),
             total=(args.n_epochs - args.starting_epoch)
@@ -220,7 +230,8 @@ if __name__ == "__main__":
                     'optimizer_G': optimizer_G.state_dict(),
                     'D_A': D_A.state_dict(),
                     'D_B': D_B.state_dict(),
-                    'optimizer_D': optimizer_D.state_dict()
+                    'optimizer_D': optimizer_D.state_dict(),
+                    'start_epoch': epoch + 1
                 }, f"{args.checkpoint_dir}/{args.data_root.split('/')[-1]}_{epoch}.pth")
 
                 # saving space, only saving latest weights
