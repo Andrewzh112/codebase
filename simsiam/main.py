@@ -13,6 +13,7 @@ from datetime import datetime
 from simsiam.model import SimSiam
 from simsiam.data import GaussianBlur, CIFAR10Pairs
 from networks.layers import Linear_Probe
+from networks.utils import load_weights
 from utils.contrastive import get_feature_label
 
 parser = argparse.ArgumentParser(description='Train SimSiam')
@@ -81,11 +82,12 @@ if __name__ == '__main__':
 
     start_epoch = 0
     if args.continue_train:
-        state_dicts = torch.load(args.check_point)
-        start_epoch = state_dicts['start_epoch']
-        model.load_state_dict(state_dicts['model'])
-        optimizer.load_state_dict(state_dicts['optimizer'])
-        del state_dicts
+        start_epoch = load_weights(state_dict_path=args.check_point,
+                                   models=[f_q, f_k],
+                                   model_names=['f_q', 'f_k'],
+                                   optimizers=[optimizer],
+                                   optimizer_names=['optimizer'],
+                                   return_val='start_epoch')
 
     pbar = tqdm(range(start_epoch, args.epochs))
     for epoch in pbar:

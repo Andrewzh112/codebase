@@ -14,6 +14,7 @@ from moco.model import MoCo
 from moco.utils import (GaussianBlur, CIFAR10Pairs, MoCoLoss,
                         MemoryBank, momentum_update, get_momentum_encoder)
 from networks.layers import Linear_Probe
+from networks.utils import load_weights
 from utils.contrastive import get_feature_label
 
 parser = argparse.ArgumentParser(description='Train MoCo')
@@ -87,12 +88,12 @@ if __name__ == '__main__':
 
     start_epoch = 0
     if args.continue_train:
-        state_dicts = torch.load(args.check_point)
-        start_epoch = state_dicts['start_epoch']
-        f_q.load_state_dict(state_dicts['f_q'])
-        f_k.load_state_dict(state_dicts['f_k'])
-        optimizer.load_state_dict(state_dicts['optimizer'])
-        del state_dicts
+        start_epoch = load_weights(state_dict_path=args.check_point,
+                                   models=[f_q, f_k],
+                                   model_names=['f_q', 'f_k'],
+                                   optimizers=[optimizer],
+                                   optimizer_names=['optimizer'],
+                                   return_val='start_epoch')
 
     pbar = tqdm(range(start_epoch, args.epochs))
     for epoch in pbar:
