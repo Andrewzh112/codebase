@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 from torch.utils.data import DataLoader
-from networks.utils import SimpleDataset
+from utils.data import SimpleDataset
 
 
 class ConvNormAct(nn.Module):
