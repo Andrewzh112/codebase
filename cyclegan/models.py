@@ -33,19 +33,6 @@ class ResBlock(nn.Module):
         return self.resblock(x)
 
 
-def initialize_weights(model, nonlinearity='leaky_relu'):
-    for m in model.modules():
-        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_normal_(
-                m.weight,
-                mode='fan_out',
-                nonlinearity=nonlinearity
-            )
-        elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-            nn.init.normal_(m.weight, 0.0, 0.02)
-            nn.init.constant_(m.bias, 0)
-
-
 def set_requires_grad(nets, requires_grad=False):
         if not isinstance(nets, list):
             nets = [nets]
@@ -101,8 +88,7 @@ class Generator(nn.Module):
                 hidden_dim * 2,
                 kernel_size=3,
                 padding=1,
-                stride=2,
-                padding_mode='reflect'
+                stride=2
             ),
             nn.InstanceNorm2d(hidden_dim * 2),
             nn.ReLU(),
@@ -111,8 +97,7 @@ class Generator(nn.Module):
                 hidden_dim * 4,
                 kernel_size=3,
                 padding=1,
-                stride=2,
-                padding_mode='reflect'
+                stride=2
             ),
             nn.InstanceNorm2d(hidden_dim * 4),
             nn.ReLU(),
@@ -194,9 +179,8 @@ class Discriminator(nn.Module):
             nn.Conv2d(
                 hidden_dim * 8,
                 out_channels=1,
-                kernel_size=1,
-                padding=1,
-                stride=1,
+                kernel_size=4,
+                padding=1
             )
         )
         init_weights(self)

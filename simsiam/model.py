@@ -2,45 +2,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import torchvision
-from torch.utils.data import DataLoader
-from simsiam.data import SimpleDataset
-
-
-class Linear_Classifier(nn.Module):
-    def __init__(self, args, num_classes, epochs=500, lr=1e-3):
-        super().__init__()
-        self.fc = nn.Linear(args.hidden_dim, num_classes)
-        self.epochs = epochs
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        self.criterion = nn.CrossEntropyLoss()
-        self.scheduler = torch.optim.lr_scheduler.MultiplicativeLR(
-            self.optimizer,
-            lr_lambda=lambda lr: 0.995)
-
-    def forward(self, x):
-        return self.fc(x)
-
-    def loss(self, y_hat, y):
-        return self.criterion(y_hat, y)
-
-    def fit(self, x, y):
-        dataset = SimpleDataset(x, y)
-        loader = DataLoader(dataset, batch_size=2056, shuffle=True)
-        self.train()
-        for _ in range(self.epochs):
-            for features, labels in loader:
-                y_hat = self.forward(features)
-                loss = self.loss(y_hat, labels)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-            self.scheduler.step()
-
-    def predict(self, x):
-        self.eval()
-        with torch.no_grad():
-            predictions = self.forward(x)
-        return torch.argmax(predictions, dim=1)
 
 
 class SimSiam(nn.Module):

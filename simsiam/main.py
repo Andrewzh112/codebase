@@ -10,8 +10,10 @@ from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
 
-from simsiam.model import SimSiam, Linear_Classifier
+from simsiam.model import SimSiam
 from simsiam.data import GaussianBlur, CIFAR10Pairs
+from networks.layers import Linear_Probe
+from utils.contrastive import get_feature_label
 
 parser = argparse.ArgumentParser(description='Train SimSiam')
 
@@ -104,31 +106,14 @@ if __name__ == '__main__':
         writer.add_scalar('Train Loss', sum(train_losses) / len(train_losses), global_step=epoch)
 
         model.eval()
-        feature_bank, targets = [], []
-        # get current feature maps & fit LR
-        for data, target in feature_loader:
-            data, target = data.to(device), target.to(device)
-            with torch.no_grad():
-                feature = model(data)
-            feature = F.normalize(feature, dim=1)
-            feature_bank.append(feature.clone().detach())
-            targets.append(target)
-        feature_bank = torch.cat(feature_bank, dim=0)
-        feature_labels = torch.cat(targets, dim=0)
+        # extract features as training data
+        feature_bank, feature_labels = get_feature_label(model, feature_loader, device, normalize=True)
 
-        linear_classifier = Linear_Classifier(args, len(feature_data.classes)).to(device)
+        linear_classifier = Linear_Probe(len(feature_data.classes), hidden_dim=args.hidden_dim).to(device)
         linear_classifier.fit(feature_bank, feature_labels)
 
-        y_preds, y_trues = [], []
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            with torch.no_grad():
-                feature = model(data)
-            feature = F.normalize(feature, dim=1)
-            y_preds.append(linear_classifier.predict(feature.detach()))
-            y_trues.append(target)
-        y_trues = torch.cat(y_trues, dim=0)
-        y_preds = torch.cat(y_preds, dim=0)
+        # using linear classifier to predict test data
+        y_preds, y_trues = get_feature_label(model, test_loader, device, normalize=True, predictor=linear_classifier)
         top1acc = y_trues.eq(y_preds).sum().item() / y_preds.size(0)
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
         writer.add_scalar('Representation Standard Deviation', feature_bank.std(), global_step=epoch)

@@ -11,7 +11,6 @@ from cyclegan.utils import ReplayBuffer, LambdaLR, make_images, get_random_ids
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-train', action="store_true", default=False, help='Train cycleGAN models')
 parser.add_argument('--dim_A', type=int, default=3, help='Numer of channels for class A')
 parser.add_argument('--dim_B', type=int, default=3, help='Numer of channels for class B')
 parser.add_argument('--n_res_blocks', type=int, default=9, help='Number of ResNet Blocks for generators')
@@ -25,7 +24,7 @@ parser.add_argument('--decay_epoch', type=int, default=50, help='Starting epoch 
 parser.add_argument('--load_shape', type=int, default=256, help='Initial image H or W')
 parser.add_argument('--target_shape', type=int, default=224, help='Final image H or W')
 parser.add_argument('--progress_interval', type=int, default=1, help='Save model and generated image every x epoch')
-parser.add_argument('--sample_batches', type=int, default=25, help='How many generated images to sample')
+parser.add_argument('--sample_batches', type=int, default=32, help='How many generated images to sample')
 parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
 parser.add_argument('--lambda_identity', type=float, default=0.1, help='Identity loss weight')
 parser.add_argument('--lambda_cycle', type=float, default=10., help='Cycle loss weight')
@@ -103,7 +102,14 @@ if __name__ == "__main__":
         D_A.train()
         D_B.train()
         disc_A_losses, gen_A_losses, disc_B_losses, gen_B_losses = [], [], [], []
+        (gen_ad_A_losses,
+         gen_ad_B_losses,
+         gen_id_A_losses,
+         gen_id_B_losses,
+         gen_cyc_A_losses,
+         gen_cyc_B_losses) = [], [], [], [], [], [] 
         real_As, real_Bs, fake_As, fake_Bs = [], [], [], []
+        identity_As, identity_Bs, cycle_As, cycle_Bs = [], [], [], []
         for batch_idx, (real_A, real_B) in enumerate(dataloader):
             real_A = torch.nn.functional.interpolate(real_A, size=args.target_shape).to(device)
             real_B = torch.nn.functional.interpolate(real_B, size=args.target_shape).to(device)
@@ -123,9 +129,9 @@ if __name__ == "__main__":
             real_B_logits = D_B(real_B)
 
             # sample from queue
-            pool_fake_A = pool_A.sample(fake_A.detach())
-            pool_fake_B = pool_B.sample(fake_B.detach())
-            fake_pool_A_logits = D_B(pool_fake_A)
+            pool_fake_A = pool_A.sample(fake_A.clone().detach())
+            pool_fake_B = pool_B.sample(fake_B.clone().detach())
+            fake_pool_A_logits = D_A(pool_fake_A)
             fake_pool_B_logits = D_B(pool_fake_B)
 
             # disc loss
@@ -135,7 +141,7 @@ if __name__ == "__main__":
             disc_B_fake_loss = criterion_GAN(fake_pool_B_logits, torch.zeros_like(fake_pool_B_logits))
             disc_B_real_loss = criterion_GAN(real_B_logits, torch.ones_like(real_B_logits))
             disc_B_loss = (disc_B_fake_loss + disc_B_real_loss) / 2
-            disc_loss = disc_A_loss + disc_A_loss
+            disc_loss = disc_A_loss + disc_B_loss
 
             # generator loss
             adversarial_A_loss = criterion_GAN(fake_A_logits, torch.ones_like(fake_A_logits))
@@ -165,11 +171,21 @@ if __name__ == "__main__":
             gen_B_losses.append(gen_B_loss.item())
             disc_A_losses.append(disc_A_loss.item())
             disc_B_losses.append(disc_B_loss.item())
+            gen_ad_A_losses.append(adversarial_A_loss.item())
+            gen_ad_B_losses.append(adversarial_B_loss.item())
+            gen_id_A_losses.append(identity_A_loss.item())
+            gen_id_B_losses.append(identity_B_loss.item())
+            gen_cyc_A_losses.append(cycle_A_loss.item())
+            gen_cyc_B_losses.append(cycle_B_loss.item())
             if batch_idx in sampled_idx:
                 real_As.append(real_A.detach().cpu())
                 real_Bs.append(real_B.detach().cpu())
                 fake_As.append(fake_A.detach().cpu())
                 fake_Bs.append(fake_B.detach().cpu())
+                identity_As.append(identity_A.detach().cpu())
+                identity_Bs.append(identity_B.detach().cpu())
+                cycle_As.append(cycle_A.detach().cpu())
+                cycle_Bs.append(cycle_B.detach().cpu())
 
         lr_scheduler_D.step()
         lr_scheduler_G.step()
@@ -179,12 +195,22 @@ if __name__ == "__main__":
                     'Discriminator A': sum(disc_A_losses) / len(disc_A_losses),
                     'Discriminator B': sum(disc_B_losses) / len(disc_B_losses),
                     'Generator A': sum(gen_A_losses) / len(gen_A_losses),
-                    'Generator B': sum(gen_B_losses) / len(gen_B_losses)
+                    'Generator B': sum(gen_B_losses) / len(gen_B_losses),
+                    'Generator Adversarial A': sum(gen_ad_A_losses) / len(gen_ad_A_losses),
+                    'Generator Adversarial B': sum(gen_ad_B_losses) / len(gen_ad_B_losses),
+                    'Generator Cycle A': sum(gen_cyc_A_losses) / len(gen_cyc_A_losses),
+                    'Generator Cycle B': sum(gen_cyc_B_losses) / len(gen_cyc_B_losses),
+                    'Generator Identity A': sum(gen_id_A_losses) / len(gen_id_A_losses),
+                    'Generator Identity B': sum(gen_id_B_losses) / len(gen_id_B_losses)
                 }, global_step=epoch)
             writer.add_image('Fake A', make_images(fake_As), global_step=epoch)
             writer.add_image('Fake B', make_images(fake_Bs), global_step=epoch)
             writer.add_image('Real A', make_images(real_As), global_step=epoch)
             writer.add_image('Real B', make_images(real_Bs), global_step=epoch)
+            writer.add_image('Identity A', make_images(identity_As), global_step=epoch)
+            writer.add_image('Identity B', make_images(identity_Bs), global_step=epoch)
+            writer.add_image('Cycle A', make_images(cycle_As), global_step=epoch)
+            writer.add_image('Cycle B', make_images(cycle_Bs), global_step=epoch)
             if (epoch + 1) % 10 == 0:
                 if not os.path.isdir(args.checkpoint_dir):
                     os.makedirs(args.checkpoint_dir)

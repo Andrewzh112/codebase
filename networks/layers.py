@@ -1,4 +1,7 @@
 from torch import nn
+import torch
+from torch.utils.data import DataLoader
+from networks.utils import SimpleDataset
 
 
 class ConvNormAct(nn.Module):
@@ -90,3 +93,40 @@ class Reshape(nn.Module):
 
     def forward(self, x):
         return x.view(self.shape)
+
+
+class Linear_Probe(nn.Module):
+    def __init__(self, num_classes, hidden_dim=256, lr=1e-3):
+        super().__init__()
+        self.fc = nn.Linear(hidden_dim, num_classes)
+        self.optimizer = torch.optim.SGD(self.parameters(), lr=lr,
+                                         momentum=0.9, weight_decay=0.0001)
+        self.criterion = nn.CrossEntropyLoss()
+        self.scheduler = torch.optim.lr_scheduler.MultiplicativeLR(
+            self.optimizer,
+            lr_lambda=lambda lr: 0.995)
+
+    def forward(self, x):
+        return self.fc(x)
+
+    def loss(self, y_hat, y):
+        return self.criterion(y_hat, y)
+
+    def fit(self, x, y, epochs=500):
+        dataset = SimpleDataset(x, y)
+        loader = DataLoader(dataset, batch_size=2056, shuffle=True)
+        self.train()
+        for _ in range(epochs):
+            for features, labels in loader:
+                y_hat = self.forward(features)
+                loss = self.loss(y_hat, labels)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+            self.scheduler.step()
+
+    def predict(self, x):
+        self.eval()
+        with torch.no_grad():
+            predictions = self.forward(x)
+        return torch.argmax(predictions, dim=1)

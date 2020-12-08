@@ -5,25 +5,22 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn import functional as F
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
-from sklearn.exceptions import ConvergenceWarning
-
 import argparse
 from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
-from warnings import simplefilter
 
 from moco.model import MoCo
 from moco.utils import (GaussianBlur, CIFAR10Pairs, MoCoLoss,
                         MemoryBank, momentum_update, get_momentum_encoder)
+from networks.layers import Linear_Probe
+from utils.contrastive import get_feature_label
 
-simplefilter(action='ignore', category=ConvergenceWarning)
 parser = argparse.ArgumentParser(description='Train MoCo')
 
 # training configs
 parser.add_argument('--lr', default=0.03, type=float, help='initial learning rate')
+parser.add_argument('--continue_train', action="store_true", default=False, help='continue training')
 parser.add_argument('--epochs', default=200, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('--batch_size', default=256, type=int, metavar='N', help='mini-batch size')
 parser.add_argument('--wd', default=0.0001, type=float, metavar='W', help='weight decay')
@@ -88,7 +85,16 @@ if __name__ == '__main__':
     memo_bank = MemoryBank(f_k, device, momentum_loader, args.K)
     writer = SummaryWriter(args.logs_root + f'/{int(datetime.now().timestamp()*1e6)}')
 
-    pbar = tqdm(range(args.epochs))
+    start_epoch = 0
+    if args.continue_train:
+        state_dicts = torch.load(args.check_point)
+        start_epoch = state_dicts['start_epoch']
+        f_q.load_state_dict(state_dicts['f_q'])
+        f_k.load_state_dict(state_dicts['f_k'])
+        optimizer.load_state_dict(state_dicts['optimizer'])
+        del state_dicts
+
+    pbar = tqdm(range(start_epoch, args.epochs))
     for epoch in pbar:
         train_losses = []
         for x1, x2 in train_loader:
@@ -107,32 +113,28 @@ if __name__ == '__main__':
             pbar.set_postfix({'Loss': loss.item(), 'Learning Rate': scheduler.get_last_lr()[0]})
 
         writer.add_scalar('Train Loss', sum(train_losses) / len(train_losses), global_step=epoch)
-        torch.save(f_q.state_dict(), args.check_point)
         scheduler.step()
 
-        feature_bank, feature_labels = [], []
-        for data, target in momentum_loader:
-            with torch.no_grad():
-                features = f_q(data)
-            feature_bank.append(features)
-            feature_labels.append(target)
-        feature_bank = torch.cat(feature_bank).cpu().numpy()
-        feature_labels = torch.cat(feature_labels).numpy()
+        f_q.eval()
+        # extract features as training data
+        feature_bank, feature_labels = get_feature_label(f_q, momentum_loader, device, normalize=True)
 
-        linear_classifier = LogisticRegression(multi_class='multinomial', solver='lbfgs')
+        linear_classifier = Linear_Probe(len(momentum_data.classes), hidden_dim=args.feature_dim).to(device)
         linear_classifier.fit(feature_bank, feature_labels)
 
-        y_preds, y_trues = [], []
-        for data, target in test_loader:
-            with torch.no_grad():
-                feature = f_q(data).cpu().numpy()
-            y_preds.extend(linear_classifier.predict(feature).tolist())
-            y_trues.append(target)
-        y_trues = torch.cat(y_trues, dim=0).numpy()
-        top1acc = accuracy_score(y_trues, y_preds) * 100
+        # using linear classifier to predict test data
+        y_preds, y_trues = get_feature_label(f_q, test_loader, device, normalize=True, predictor=linear_classifier)
+        top1acc = y_trues.eq(y_preds).sum().item() / y_preds.size(0)
+
         writer.add_scalar('Top Acc @ 1', top1acc, global_step=epoch)
         writer.add_scalar('Representation Standard Deviation', feature_bank.std(), global_step=epoch)
         tqdm.write(f'Epoch: {epoch + 1}/{args.epochs}, \
                 Training Loss: {sum(train_losses) / len(train_losses)}, \
                 Top Accuracy @ 1: {top1acc}, \
                 Representation STD: {feature_bank.std()}')
+        torch.save({
+            'f_q': f_q.state_dict(),
+            'f_k': f_k.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'start_epoch': epoch + 1},
+            args.check_point)
