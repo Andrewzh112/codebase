@@ -43,7 +43,7 @@ if __name__ == "__main__":
         os.makedirs(args.log_dir)
 
     writer = SummaryWriter(
-            args.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
+            args.log_dir + args.data_root.split('/')[-1] + f'/{int(datetime.now().timestamp()*1e6)}')
     G_AB = Generator(
             args.dim_A,
             args.dim_B,
@@ -221,7 +221,7 @@ if __name__ == "__main__":
                     'D_A': D_A.state_dict(),
                     'D_B': D_B.state_dict(),
                     'optimizer_D': optimizer_D.state_dict()
-                }, f"{args.checkpoint_dir}/cycleGAN_{epoch}.pth")
+                }, f"{args.checkpoint_dir}/{args.data_root.split('/')[-1]}_{epoch}.pth")
 
                 # saving space, only saving latest weights
                 if epoch > 10:
