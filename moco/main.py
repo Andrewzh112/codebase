@@ -77,8 +77,6 @@ if __name__ == '__main__':
 
     f_q = torch.nn.DataParallel(MoCo(args), device_ids=[0, 1]).to(device)
     f_k = get_momentum_encoder(f_q)
-    for name, _ in f_q.named_modules():
-        print(name)
 
     criterion = MoCoLoss(args.temperature)
     optimizer = torch.optim.SGD(f_q.parameters(), lr=args.lr,
@@ -123,7 +121,7 @@ if __name__ == '__main__':
         # extract features as training data
         feature_bank, feature_labels = get_feature_label(f_q, momentum_loader, device, normalize=False)
 
-        linear_classifier = Linear_Probe(num_classes=len(momentum_data.classes), in_features=f_q.out_features).to(device)
+        linear_classifier = Linear_Probe(num_classes=len(momentum_data.classes), in_features=f_q.module.out_features).to(device)
         linear_classifier.fit(feature_bank, feature_labels)
 
         # using linear classifier to predict test data

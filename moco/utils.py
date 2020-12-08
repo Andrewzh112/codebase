@@ -53,7 +53,7 @@ class MemoryBank:
     """https://github.com/peisuke/MomentumContrast.pytorch"""
     def __init__(self, f_k, device, loader, K=4096):
         self.K = K
-        self.queue = torch.empty(dtype=torch.float)
+        self.queue = torch.Tensor()
         self.queue = self.queue.to(device)
 
         # initialize queue with 32 features

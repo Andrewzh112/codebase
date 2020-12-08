@@ -18,7 +18,7 @@ class MoCo(nn.Module):
             self.encoder = torchvision.models.resnet101(progress=False)
         elif args.backbone == 'resnet152':
             self.encoder = torchvision.models.resnet152(progress=False)
-        elif args.backbone == 'basic':
+        elif args.backbone == 'simple':
             self.encoder = nn.Sequential(
                 ConvNormAct(3, 32, mode='down'),
                 ConvNormAct(32, 64, mode='down'),
@@ -29,9 +29,9 @@ class MoCo(nn.Module):
             raise NotImplementedError
 
         # disabling last layers, also saving the feature dimension for inference
-        if args.backbone != 'basic':
-            self.encoder.fc = nn.Identity()
+        if args.backbone != 'simple':
             self.out_features = self.encoder.fc.in_features
+            self.encoder.fc = nn.Identity()
         else:    
             self.out_features = 128
 
