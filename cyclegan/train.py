@@ -46,7 +46,7 @@ if __name__ == "__main__":
         os.makedirs(args.log_dir)
 
     writer = SummaryWriter(
-            args.log_dir + args.data_root.split('/')[-1] + f'/{int(datetime.now().timestamp()*1e6)}')
+            args.log_dir + f"/{args.data_root.split('/')[-1]}{int(datetime.now().timestamp()*1e6)}")
     G_AB = Generator(
             args.dim_A,
             args.dim_B,
@@ -100,7 +100,6 @@ if __name__ == "__main__":
                                         optimizers=[optimizer_G, optimizer_D],
                                         optimizer_names=['optimizer_G', 'optimizer_D'],
                                         return_val='start_epoch')
-        args.starting_epoch = start_epoch
     pbar = tqdm(
             range(args.starting_epoch, args.n_epochs),
             total=(args.n_epochs - args.starting_epoch)
