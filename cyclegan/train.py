@@ -5,6 +5,8 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 import itertools
 from tqdm import tqdm
+
+from networks.utils import load_weights
 from cyclegan.data import CycleImageDataset
 from cyclegan.models import Generator, Discriminator, set_requires_grad
 from cyclegan.utils import ReplayBuffer, LambdaLR, make_images, get_random_ids
@@ -17,6 +19,7 @@ parser.add_argument('--n_res_blocks', type=int, default=9, help='Number of ResNe
 parser.add_argument('--hidden_dim', type=int, default=64, help='Number of hidden dimensions for model')
 parser.add_argument('--lr_G', type=float, default=0.0002, help='Learning rate for generators')
 parser.add_argument('--lr_D', type=float, default=0.0002, help='Learning rate for discriminators')
+parser.add_argument('--continue_train', action="store_true", default=False, help='continue training')
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
 parser.add_argument('--starting_epoch', type=int, default=0, help='Starting epoch for resuming training')
@@ -91,15 +94,13 @@ if __name__ == "__main__":
     pool_B = ReplayBuffer()
 
     if args.continue_train:
-        args.start_epoch = load_weights(state_dict_path=args.check_point,
+        args.start_epoch = load_weights(state_dict_path=f"{args.checkpoint_dir}/{args.data_root.split('/')[-1]}.pth",
                                         models=[D_A, D_B, G_AB, G_BA],
                                         model_names=['D_A', 'D_B', 'G_AB', 'G_BA'],
                                         optimizers=[optimizer_G, optimizer_D],
                                         optimizer_names=['optimizer_G', 'optimizer_D'],
                                         return_val='start_epoch')
-
-    pbar = tqdm(range(start_epoch, args.epochs))
-
+        args.starting_epoch = start_epoch
     pbar = tqdm(
             range(args.starting_epoch, args.n_epochs),
             total=(args.n_epochs - args.starting_epoch)
@@ -232,11 +233,7 @@ if __name__ == "__main__":
                     'D_B': D_B.state_dict(),
                     'optimizer_D': optimizer_D.state_dict(),
                     'start_epoch': epoch + 1
-                }, f"{args.checkpoint_dir}/{args.data_root.split('/')[-1]}_{epoch}.pth")
-
-                # saving space, only saving latest weights
-                if epoch > 10:
-                    os.remove(f"{args.checkpoint_dir}/cycleGAN_{epoch - 10}.pth")
+                }, f"{args.checkpoint_dir}/{args.data_root.split('/')[-1]}.pth")
         tqdm.write('#########################################################')
         tqdm.write(
             f'Epoch {epoch + 1}/{args.n_epochs}, \
