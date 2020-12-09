@@ -7,7 +7,7 @@ from utils.data import SimpleDataset
 class ConvNormAct(nn.Module):
     def __init__(self, in_channels, out_channels, mode=None, activation='relu', normalization='bn'):
         super().__init__()
-        # typical convolution configs 
+        # typical convolution configs
         if mode == 'up':
             conv = nn.ConvTranspose2d(in_channels, out_channels, 4, 2, 1, bias=False)
         elif mode == 'down':
@@ -120,3 +120,33 @@ class Linear_Probe(nn.Module):
         with torch.no_grad():
             predictions = self.forward(x)
         return torch.argmax(predictions, dim=1)
+
+
+class SA_Conv2d(nn.Module):
+    """SAGAN"""
+    def __init__(self, in_channels, k=8):
+        super().__init__()
+        self.f = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
+        self.g = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
+        self.h = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
+        self.v = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
+
+        # adaptive attention weight
+        self.gamma = torch.tensor(0, requires_grad=True)
+
+    def _dot_product_softmax(self, f, g):
+        s = torch.einsum('ijk,ijk->ijj', f, g)
+        beta = torch.softmax(s, dim=1)
+        return beta
+
+    def forward(self, x):
+        f = self.f(x).view(x.size(0), x.size(1), -1)
+        g = self.g(x).view(x.size(0), x.size(1), -1)
+        h = self.h(x).view(x.size(0), x.size(1), -1)
+        beta = self._dot_product_softmax(f, g)
+        s = torch.einsum('ijk,ijj->ijk', h, beta).view(
+            h.size(0),
+            h.size(1),
+            int(h.size(2)**0.5),
+            int(h.size(2)**0.5))
+        return self.gamma * self.v(s) + x
