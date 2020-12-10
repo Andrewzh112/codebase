@@ -2,18 +2,25 @@ from torch import nn
 import torch
 from torch.utils.data import DataLoader
 from utils.data import SimpleDataset
+from torch.nn import functional as F
 
 
 class ConvNormAct(nn.Module):
-    def __init__(self, in_channels, out_channels, mode=None, activation='relu', normalization='bn'):
+    def __init__(self, in_channels, out_channels, mode=None, activation='relu', normalization='bn', kernel_size=None):
         super().__init__()
         # typical convolution configs
         if mode == 'up':
-            conv = nn.ConvTranspose2d(in_channels, out_channels, 4, 2, 1, bias=False)
+            if kernel_size is None:
+                kernel_size = 4
+            conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, 2, 1, bias=False)
         elif mode == 'down':
-            conv = nn.Conv2d(in_channels, out_channels, 4, 2, 1, bias=False)
+            if kernel_size is None:
+                kernel_size = 4
+            conv = nn.Conv2d(in_channels, out_channels, kernel_size, 2, 1, bias=False)
         else:
-            conv = nn.Conv2d(in_channels, out_channels, 3, 1, 1, bias=False)
+            if kernel_size is None:
+                kernel_size = 3
+            conv = nn.Conv2d(in_channels, out_channels, kernel_size, 1, 1, bias=False)
 
         # normalization
         # TODO GroupNorm
@@ -124,29 +131,49 @@ class Linear_Probe(nn.Module):
 
 class SA_Conv2d(nn.Module):
     """SAGAN"""
-    def __init__(self, in_channels, k=8):
+    def __init__(self, in_channels, K=8, down_sample=True):
         super().__init__()
-        self.f = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
-        self.g = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
-        self.h = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
-        self.v = nn.Conv2d(in_channels, in_channels//k, kernel_size=1)
+        self.f = nn.Conv2d(in_channels, in_channels // K, kernel_size=1)
+        self.g = nn.Conv2d(in_channels, in_channels // K, kernel_size=1)
+        self.h = nn.Conv2d(in_channels, in_channels // 2, kernel_size=1)
+        self.v = nn.Conv2d(in_channels // 2, in_channels, kernel_size=1)
 
         # adaptive attention weight
-        self.gamma = torch.tensor(0, requires_grad=True)
+        self.gamma = nn.Parameter(torch.tensor(0., requires_grad=True))
+
+        self.down_sample = down_sample
+        self.K = K
 
     def _dot_product_softmax(self, f, g):
-        s = torch.einsum('ijk,ijk->ijj', f, g)
-        beta = torch.softmax(s, dim=1)
+        s = torch.einsum('ijk,ijl->ikl', f, g)
+        beta = torch.softmax(s, dim=-1)
         return beta
 
     def forward(self, x):
-        f = self.f(x).view(x.size(0), x.size(1), -1)
-        g = self.g(x).view(x.size(0), x.size(1), -1)
-        h = self.h(x).view(x.size(0), x.size(1), -1)
-        beta = self._dot_product_softmax(f, g)
-        s = torch.einsum('ijk,ijj->ijk', h, beta).view(
-            h.size(0),
-            h.size(1),
-            int(h.size(2)**0.5),
-            int(h.size(2)**0.5))
-        return self.gamma * self.v(s) + x
+        """
+        b - batch size
+        c - channels
+        h - height
+        w - width
+        k - shrinking factor
+        """
+        # tracking shapes
+        B, C, H, W = x.size()
+        K = self.K
+        HW_prime = H * W
+
+        # get qkv's
+        f = self.f(x).view(B, C // K, H * W)                                # B x (C/K) x (HW)
+        g = self.g(x)                                                       # B x (C/K) x H x W
+        h = self.h(x)                                                       # B x (C/2) x H x W
+        if self.down_sample:
+            g = F.max_pool2d(g, [2, 2])                                     # B x (C/K) x (H/2) x (W/2)
+            h = F.max_pool2d(h, [2, 2])                                     # B x (C/2) x (H/2) x (W/2)
+            HW_prime = HW_prime // 4                                        # update (HW)'<-(HW) // 4
+
+        g = g.view(B, C // K, HW_prime)                                     # B x (C/K) x (HW)'
+        h = h.view(B, 4 * C // K, HW_prime)                                 # B x (C/2) x (HW)'
+
+        beta = self._dot_product_softmax(f, g)                              # B x (HW) x (HW)'
+        s = torch.einsum('ijk,ilk->ijl', h, beta).view(B, 4 * C // K, H, W) # B x (C/2) x H x W
+        return self.gamma * self.v(s) + x                                   # B x C x H x W
