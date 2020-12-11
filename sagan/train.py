@@ -57,14 +57,15 @@ def train():
     if opt.save_local_samples:
         Path(opt.sample_dir).mkdir(parents=True, exist_ok=True)
 
-    G = torch.nn.DataParallel(Generator(opt), device_ids=opt.devices).to(device)
-    D = torch.nn.DataParallel(Discriminator(opt), device_ids=opt.devices).to(device)
+    G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size), device_ids=opt.devices).to(device)
+    D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices).to(device)
 
     criterion = SAGAN_Hinge_loss()
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr_G, betas=opt.betas)
     optimizer_D = torch.optim.Adam(D.parameters(), lr=opt.lr_D, betas=opt.betas)
 
-    loader = get_loaders(opt)
+    loader = get_loaders(opt.data_path, opt.img_ext, opt.crop_size,
+                         opt.img_size, opt.batch_size)
     # sample fixed z to see progress through training
     fixed_z = torch.randn(opt.sample_size, opt.z_dim).to(device)
 

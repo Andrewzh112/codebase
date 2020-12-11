@@ -8,14 +8,13 @@ from torch.utils.data import Dataset, DataLoader
 
 
 class celebA(Dataset):
-    def __init__(self, args):
-        self.celebs = glob(args.data_path + '/*' + args.img_ext)
+    def __init__(self, data_path, img_ext, crop_size, img_size):
+        self.celebs = glob(data_path + '/*' + img_ext)
         self.transforms = transforms.Compose([
-            transforms.CenterCrop(args.crop_size),
-            transforms.Resize(args.img_size),
+            transforms.CenterCrop(crop_size),
+            transforms.Resize(img_size),
             transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            # transforms.Normalize(mean=[0.50612, 0.42543, 0.38283], std=[0.26589, 0.24522, 0.24128])
+            transforms.ToTensor()
         ])
 
     def __len__(self):
@@ -26,8 +25,8 @@ class celebA(Dataset):
         return self.transforms(img)
 
 
-def get_loaders(args):
-    dataset = celebA(args)
-    if args.download:
+def get_loaders(data_path, img_ext, crop_size, img_size, batch_size, download):
+    dataset = celebA(data_path, img_ext, crop_size, img_size)
+    if download:
         dataset = CelebA('celebA', transform=dataset.transforms, download=True)
-    return DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=28)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=28)

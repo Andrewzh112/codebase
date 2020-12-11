@@ -72,7 +72,10 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=28)
 
     writer = SummaryWriter(args.logs_root + f'/{int(datetime.now().timestamp()*1e6)}')
-    model = torch.nn.DataParallel(SimSiam(args), device_ids=args.device_ids).to(device)
+    model = torch.nn.DataParallel(SimSiam(args.hidden_dim,
+                                          args.bottleneck_dim,
+                                          args.backbone,
+                                          args.num_encoder_fcs), device_ids=args.device_ids).to(device)
     Path('/'.join(args.check_point.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 

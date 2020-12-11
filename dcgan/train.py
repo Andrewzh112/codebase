@@ -40,9 +40,10 @@ def train():
         os.mkdir(opt.log_dir)
     if not os.path.isdir(opt.sample_dir):
         os.mkdir(opt.sample_dir)
-    loader = get_loaders(opt)
-    G = Generator(opt)
-    D = Discriminator(opt)
+    loader = get_loaders(opt.data_path, opt.img_ext, opt.crop_size,
+                         opt.img_size, opt.batch_size, opt.download)
+    G = Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size)
+    D = Discriminator(opt.img_channels, opt.h_dim, opt.img_size)
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr, betas=opt.betas)
     optimizer_D = torch.optim.Adam(D.parameters(), lr=opt.lr, betas=opt.betas)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

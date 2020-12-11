@@ -12,7 +12,9 @@ from vae.main import parser, args
 class Sampler:
     def __init__(self):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        self.vae = torch.nn.DataParallel(VAE(args), device_ids=args.device_ids).to(self.device)
+        self.vae = torch.nn.DataParallel(
+            VAE(args.z_dim, args.model_dim, args.img_size, args.img_channels, args.n_res_blocks),
+            device_ids=args.device_ids).to(device)
         self.vae.load_state_dict(torch.load(f"{args.checkpoint_dir}/VAE.pth")['model'])
         self.vae.eval()
         Path(args.sample_path).mkdir(parents=True, exist_ok=True)

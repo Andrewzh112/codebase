@@ -5,41 +5,40 @@ import torchvision
 
 
 class SimSiam(nn.Module):
-    def __init__(self, args):
+    def __init__(self, hidden_dim, bottleneck_dim, backbone, num_encoder_fcs):
         super().__init__()
-        self.args = args
-        if args.backbone == 'resnet18':
+        if backbone == 'resnet18':
             self.encoder = torchvision.models.resnet18(progress=False)
-        elif args.backbone == 'resnet34':
+        elif backbone == 'resnet34':
             self.encoder = torchvision.models.resnet34(progress=False)
-        elif args.backbone == 'resnet50':
+        elif backbone == 'resnet50':
             self.encoder = torchvision.models.resnet50(progress=False)
-        elif args.backbone == 'resnet101':
+        elif backbone == 'resnet101':
             self.encoder = torchvision.models.resnet101(progress=False)
-        elif args.backbone == 'resnet152':
+        elif backbone == 'resnet152':
             self.encoder = torchvision.models.resnet152(progress=False)
         else:
             raise NotImplementedError
 
         fc = []
-        for i in range(args.num_encoder_fcs):
+        for i in range(num_encoder_fcs):
             # dim of resnet features
             if i == 0:
                 in_features = self.encoder.fc.in_features
             else:
-                in_features = args.hidden_dim
-            fc.append(nn.Linear(in_features, args.hidden_dim, bias=False))
-            fc.append(nn.BatchNorm1d(args.hidden_dim))
+                in_features = hidden_dim
+            fc.append(nn.Linear(in_features, hidden_dim, bias=False))
+            fc.append(nn.BatchNorm1d(hidden_dim))
             # no relu for output layer
-            if i < args.num_encoder_fcs - 1:
+            if i < num_encoder_fcs - 1:
                 fc.append(nn.ReLU())
         self.encoder.fc = nn.Sequential(*fc)
 
         self.projector = nn.Sequential(
-            nn.Linear(args.hidden_dim, args.bottleneck_dim, bias=False),
-            nn.BatchNorm1d(args.bottleneck_dim),
+            nn.Linear(hidden_dim, bottleneck_dim, bias=False),
+            nn.BatchNorm1d(bottleneck_dim),
             nn.ReLU(),
-            nn.Linear(args.bottleneck_dim, args.hidden_dim),
+            nn.Linear(bottleneck_dim, hidden_dim),
         )
 
     def forward(self, x1, x2=None):

@@ -3,17 +3,17 @@ import torch
 
 
 class VAELoss(nn.Module):
-    def __init__(self, args):
+    def __init__(self, recon, beta):
         super().__init__()
-        if args.recon == 'l2':
+        if recon == 'l2':
             self.recon = nn.MSELoss(reduction='sum')
-        elif args.recon == 'l1':
+        elif recon == 'l1':
             self.recon = nn.L1Loss(reduction='sum')
-        elif args.recon == 'bce':
+        elif recon == 'bce':
             self.recon = nn.BCELoss(reduction='sum')
         else:
             raise NotImplementedError
-        self.beta = args.beta
+        self.beta = beta
 
     def KLD_Loss(self, mu, logvar):
         KDL_batch = logvar.exp() - logvar - 1 + mu.pow(2)

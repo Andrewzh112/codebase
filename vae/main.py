@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 from networks.utils import initialize_modules
-from vae.data import get_loaders
+from dcgan.data import get_loaders
 from vae.model import VAE
 from vae.loss import VAELoss
 
@@ -56,15 +56,18 @@ if __name__ == '__main__':
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
 
-    loader = get_loaders(args)
+    loader = get_loaders(args.data_path, args.img_ext, args.crop_size,
+                         args.img_size, args.batch_size, args.download)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # initialize model, instantiate opt & scheduler & loss fn
-    model = torch.nn.DataParallel(VAE(args), device_ids=args.device_ids).to(device)
+    model = torch.nn.DataParallel(
+        VAE(args.z_dim, args.model_dim, args.img_size, args.img_channels, args.n_res_blocks),
+        device_ids=args.device_ids).to(device)
     model.apply(initialize_modules)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=args.betas)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lambda epoch: 0.995)
-    criterion = VAELoss(args)
+    criterion = VAELoss(args.recon, args.beta)
 
     # fixed z to see how model changes on the same latent vectors
     fixed_z = torch.randn(args.sample_size, args.z_dim).to(device)

@@ -5,20 +5,19 @@ from networks.layers import ConvNormAct
 
 
 class MoCo(nn.Module):
-    def __init__(self, args):
+    def __init__(self, feature_dim, backbone, mlp):
         super().__init__()
-        self.args = args
-        if args.backbone == 'resnet18':
+        if backbone == 'resnet18':
             self.encoder = torchvision.models.resnet18(progress=False)
-        elif args.backbone == 'resnet34':
+        elif backbone == 'resnet34':
             self.encoder = torchvision.models.resnet34(progress=False)
-        elif args.backbone == 'resnet50':
+        elif backbone == 'resnet50':
             self.encoder = torchvision.models.resnet50(progress=False)
-        elif args.backbone == 'resnet101':
+        elif backbone == 'resnet101':
             self.encoder = torchvision.models.resnet101(progress=False)
-        elif args.backbone == 'resnet152':
+        elif backbone == 'resnet152':
             self.encoder = torchvision.models.resnet152(progress=False)
-        elif args.backbone == 'simple':
+        elif backbone == 'simple':
             self.encoder = nn.Sequential(
                 ConvNormAct(3, 32, mode='down'),
                 ConvNormAct(32, 64, mode='down'),
@@ -29,16 +28,16 @@ class MoCo(nn.Module):
             raise NotImplementedError
 
         # disabling last layers, also saving the feature dimension for inference
-        if args.backbone != 'simple':
+        if backbone != 'simple':
             self.out_features = self.encoder.fc.in_features
             self.encoder.fc = nn.Identity()
         else:    
             self.out_features = 128
 
         # projector after feature extractor
-        fc = [nn.Linear(self.out_features, args.feature_dim)]
-        if args.mlp:
-            fc.extend([nn.ReLU(), nn.Linear(args.feature_dim, args.feature_dim)])
+        fc = [nn.Linear(self.out_features, feature_dim)]
+        if mlp:
+            fc.extend([nn.ReLU(), nn.Linear(feature_dim, feature_dim)])
         self.projector = nn.Sequential(*fc)
 
     def forward(self, x):

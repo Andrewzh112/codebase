@@ -75,7 +75,7 @@ if __name__ == '__main__':
     Path('/'.join(args.check_point.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
     Path(args.logs_root).mkdir(parents=True, exist_ok=True)
 
-    f_q = torch.nn.DataParallel(MoCo(args), device_ids=[0, 1]).to(device)
+    f_q = torch.nn.DataParallel(MoCo(args.feature_dim, args.backbone, args.mlp), device_ids=[0, 1]).to(device)
     f_k = get_momentum_encoder(f_q)
 
     criterion = MoCoLoss(args.temperature)
