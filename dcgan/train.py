@@ -76,7 +76,7 @@ def train():
 
         with torch.no_grad():
             samples = G(fixed_z)
-        samples = ((samples + 1) / 2).view(-1, opt.img_channels, opt.img_size, opt.img_size)
+        # samples = ((samples + 1) / 2).view(-1, opt.img_channels, opt.img_size, opt.img_size)
         writer.add_image('Generated Images', torchvision.utils.make_grid(samples), global_step=epoch)
         writer.add_scalars("Train Losses", {
             "Discriminator Loss": sum(d_losses) / len(d_losses),

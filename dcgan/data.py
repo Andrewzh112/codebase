@@ -4,7 +4,7 @@ from PIL import Image
 from torchvision import transforms
 from torchvision.datasets import CelebA
 import torch
-from torch.utils.data import Dataset, random_split, DataLoader
+from torch.utils.data import Dataset, DataLoader
 
 
 class celebA(Dataset):
@@ -15,7 +15,7 @@ class celebA(Dataset):
             transforms.Resize(args.img_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.50612, 0.42543, 0.38283], std=[0.26589, 0.24522, 0.24128])
+            # transforms.Normalize(mean=[0.50612, 0.42543, 0.38283], std=[0.26589, 0.24522, 0.24128])
         ])
 
     def __len__(self):

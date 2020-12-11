@@ -124,7 +124,6 @@ def train():
                 # generate image from fixed noise vector
                 with torch.no_grad():
                     samples = G(fixed_z)
-                samples = ((samples + 1) / 2).view(-1, opt.img_channels, opt.img_size, opt.img_size)
 
                 # save locally
                 if opt.save_local_samples:

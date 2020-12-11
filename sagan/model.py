@@ -9,7 +9,6 @@ class Discriminator(nn.Module):
         self.disc = nn.Sequential(
             nn.Conv2d(args.img_channels, args.h_dim, 4, 2, 1),
             ConvNormAct(args.h_dim, args.h_dim*2, 'down', activation='lrelu', normalization='bn'),
-            SA_Conv2d(args.h_dim*2),
             ConvNormAct(args.h_dim*2, args.h_dim*4, 'down', activation='lrelu', normalization='bn'),
             ConvNormAct(args.h_dim*4, args.h_dim*8, 'down', activation='lrelu', normalization='bn'),
             nn.Flatten(),
@@ -35,7 +34,7 @@ class Generator(nn.Module):
             SA_Conv2d(args.h_dim*2),
             ConvNormAct(args.h_dim*2, args.h_dim, 'up', activation='relu', normalization='bn'),
             nn.ConvTranspose2d(args.h_dim, args.img_channels, 4, 2, 1),
-            nn.Tanh()
+            nn.Sigmoid()
         )
         initialize_modules(self)
 

@@ -10,7 +10,7 @@ class Discriminator(nn.Module):
             conv_bn_relu(args.h_dim*2, args.h_dim*4, 4, 2, 'lrelu', 'up'),
             conv_bn_relu(args.h_dim*4, args.h_dim*8, 4, 2, 'lrelu', 'up'),
             nn.Flatten(),
-            nn.Linear(args.h_dim*8*4*4, 1)
+            nn.Linear(args.h_dim*8 * (args.img_size // (2 ** 4)) ** 2, 1)
         )
         initialize_weights(self)
 
@@ -31,7 +31,7 @@ class Generator(nn.Module):
             conv_bn_relu(args.h_dim*4, args.h_dim*2, 4, 2, 'relu', 'down'),
             conv_bn_relu(args.h_dim*2, args.h_dim, 4, 2, 'relu', 'down'),
             nn.ConvTranspose2d(args.h_dim, args.img_channels, 4, 2, 1),
-            nn.Tanh()
+            nn.Sigmoid()
         )
         initialize_weights(self)
 
