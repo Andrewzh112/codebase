@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--img_channels', type=int, default=3, help='Numer of channels for images')
 parser.add_argument('--img_size', type=int, default=64, help='H, W of the input images')
 parser.add_argument('--crop_size', type=int, default=128, help='H, W of the input images')
+parser.add_argument('--download', action="store_true", default=False, help='If auto download CelebA dataset')
 
 # model params
 parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')

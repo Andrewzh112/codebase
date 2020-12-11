@@ -17,8 +17,8 @@ from sagan.loss import SAGAN_Hinge_loss
 parser = argparse.ArgumentParser()
 
 # model parameters
-parser.add_argument('--h_dim', type=float, default=64, help='model dimensions multiplier')
-parser.add_argument('--z_dim', type=float, default=100, help='dimension of random noise latent vector')
+parser.add_argument('--h_dim', type=int, default=64, help='model dimensions multiplier')
+parser.add_argument('--z_dim', type=int, default=100, help='dimension of random noise latent vector')
 
 # data paramters
 parser.add_argument('--img_size', type=int, default=128, help='H, W of the input images')
@@ -65,7 +65,7 @@ def train():
     optimizer_D = torch.optim.Adam(D.parameters(), lr=opt.lr_D, betas=opt.betas)
 
     loader = get_loaders(opt.data_path, opt.img_ext, opt.crop_size,
-                         opt.img_size, opt.batch_size)
+                         opt.img_size, opt.batch_size, opt.download)
     # sample fixed z to see progress through training
     fixed_z = torch.randn(opt.sample_size, opt.z_dim).to(device)
 
