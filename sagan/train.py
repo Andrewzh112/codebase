@@ -38,7 +38,7 @@ parser.add_argument('--devices', type=list, default=[0, 1], help='List of traini
 
 # logging parameters
 parser.add_argument('--data_path', type=str, default='data/img_align_celeba', help='Path to where image data is located')
-parser.add_argument('--cpt_interval', type=int, default=100, help='Checkpoint interval')
+parser.add_argument('--cpt_interval', type=int, default=500, help='Checkpoint interval')
 parser.add_argument('--save_local_samples', action="store_true", default=False, help='Whether to save samples locally')
 parser.add_argument('--sample_size', type=int, default=64, help='Numbers of images to log')
 parser.add_argument('--checkpoint_dir', type=str, default='sagan/checkpoint', help='Path to where model weights will be saved')
@@ -48,14 +48,14 @@ opt = parser.parse_args()
 
 
 def train():
-    writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # creating dirs if needed
     Path(opt.checkpoint_dir).mkdir(parents=True, exist_ok=True)
     Path(opt.log_dir).mkdir(parents=True, exist_ok=True)
     if opt.save_local_samples:
         Path(opt.sample_dir).mkdir(parents=True, exist_ok=True)
+
+    writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size), device_ids=opt.devices).to(device)
     D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices).to(device)
@@ -119,7 +119,7 @@ def train():
                 'Batch ID': batch_idx})
 
             # tensorboard logging samples, not logging first iteration
-            if batch_idx % opt.cpt_interval == 0 and batch_idx != 0 and epoch != 0:
+            if batch_idx % opt.cpt_interval == 0:
                 ckpt_iter += 1
                 G.eval()
                 # generate image from fixed noise vector
@@ -132,6 +132,10 @@ def train():
 
                 # save sample and loss to tensorboard
                 writer.add_image('Generated Images', torchvision.utils.make_grid(samples), global_step=ckpt_iter)
+                writer.add_scalars("Train Losses", {
+                    "Discriminator Loss": sum(d_losses) / len(d_losses),
+                    "Generator Loss": sum(g_losses) / len(g_losses)
+                }, global_step=ckpt_iter)
 
                 # resetting
                 G.train()
@@ -142,10 +146,6 @@ def train():
                 Discriminator loss: {sum(d_losses) / len(d_losses):.3f}, \
                 Generator Loss: {sum(g_losses) / len(g_losses):.3f}'
         )
-        writer.add_scalars("Train Losses", {
-                    "Discriminator Loss": sum(d_losses) / len(d_losses),
-                    "Generator Loss": sum(g_losses) / len(g_losses)
-                }, global_step=epoch)
         torch.save({
                 'D': D.state_dict(),
                 'G': G.state_dict(),
