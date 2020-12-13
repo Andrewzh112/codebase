@@ -6,21 +6,35 @@ from torch.nn import functional as F
 
 
 class ConvNormAct(nn.Module):
-    def __init__(self, in_channels, out_channels, mode=None, activation='relu', normalization='bn', kernel_size=None):
+    def __init__(self, in_channels, out_channels, conv_type='basic', mode=None, activation='relu', normalization='bn', kernel_size=None):
         super().__init__()
-        # typical convolution configs
+        # type of convolution
+        if conv_type == 'basic' and mode is None or mode == 'down':
+            conv = nn.Conv2d
+        elif conv_type == 'sn' and mode is None or mode == 'down':
+            conv = SN_Conv2d
+        elif conv_type == 'basic' and mode is None or mode == 'up':
+            conv = nn.ConvTranspose2d
+        elif conv_type == 'sn' and mode is None or mode == 'up':
+            conv = SN_ConvTranspose2d
+        else:
+            raise NotImplementedError('Please only choose conv [basic, sn] and mode [None, down, up]')
+
         if mode == 'up':
             if kernel_size is None:
                 kernel_size = 4
-            conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, 2, 1, bias=False)
+            conv = conv(in_channels=in_channels, out_channels=out_channels,
+                        kernel_size=kernel_size, stride=2, padding=1, bias=False)
         elif mode == 'down':
             if kernel_size is None:
                 kernel_size = 4
-            conv = nn.Conv2d(in_channels, out_channels, kernel_size, 2, 1, bias=False)
+            conv = conv(in_channels=in_channels, out_channels=out_channels,
+                        kernel_size=kernel_size, stride=2, padding=1, bias=False)
         else:
             if kernel_size is None:
                 kernel_size = 3
-            conv = nn.Conv2d(in_channels, out_channels, kernel_size, 1, 1, bias=False)
+            conv = conv(in_channels=in_channels, out_channels=out_channels,
+                        kernel_size=kernel_size, stride=1, padding=1, bias=False)
 
         # normalization
         # TODO GroupNorm
@@ -31,7 +45,7 @@ class ConvNormAct(nn.Module):
         elif normalization == 'in':
             norm = nn.InstanceNorm2d(out_channels)
         else:
-            raise NotImplementedError
+            raise NotImplementedError('Please only choose normalization [bn, ln, in]')
 
         # activations
         if activation == 'relu':
@@ -39,7 +53,7 @@ class ConvNormAct(nn.Module):
         elif activation == 'lrelu':
             act = nn.LeakyReLU(0.2)
         else:
-            raise NotImplementedError
+            raise NotImplementedError('Please only choose activation [relu, lrelu]')
 
         self.block = nn.Sequential(
             conv,
@@ -61,7 +75,7 @@ class ResBlock(nn.Module):
         elif normalization == 'in':
             norm = nn.InstanceNorm2d(in_channels)
         else:
-            raise NotImplementedError
+            raise NotImplementedError('Please only choose normalization [bn, ln, in]')
 
         # activations
         if activation == 'relu':
@@ -69,7 +83,7 @@ class ResBlock(nn.Module):
         elif activation == 'lrelu':
             act = nn.LeakyReLU(0.2)
         else:
-            raise NotImplementedError
+            raise NotImplementedError('Please only choose activation [relu, lrelu]')
 
         self.resblock = nn.Sequential(
             nn.Conv2d(
@@ -129,14 +143,55 @@ class Linear_Probe(nn.Module):
         return torch.argmax(predictions, dim=1)
 
 
+class SN_Conv2d(nn.Module):
+    def __init__(self, eps=1e-12, **kwargs):
+        super().__init__()
+        self.conv = nn.Conv2d(**kwargs)
+        self.eps = eps
+
+    def forward(self, x):
+        return nn.utils.spectral_norm(self.conv(x), self.eps)
+
+
+class SN_ConvTranspose2d(nn.Module):
+    def __init__(self, eps=1e-12, **kwargs):
+        super().__init__()
+        self.conv = nn.ConvTranspose2d(**kwargs)
+        self.eps = eps
+
+    def forward(self, x):
+        return nn.utils.spectral_norm(self.conv(x), self.eps)
+
+
+class SN_Linear(nn.Module):
+    def __init__(self, eps=1e-12, **kwargs):
+        super().__init__()
+        self.fc = nn.Linear(**kwargs)
+        self.eps = eps
+
+    def forward(self, x):
+        return nn.utils.spectral_norm(self.fc(x), self.eps)
+
+
+class SN_Embedding(nn.Module):
+    def __init__(self, eps=1e-12, **kwargs):
+        super().__init__()
+        self.embed = nn.Embedding(**kwargs)
+        self.eps = eps
+
+    def forward(self, x):
+        return nn.utils.spectral_norm(self.Embedding(x), self.eps)
+
+
 class SA_Conv2d(nn.Module):
     """SAGAN"""
-    def __init__(self, in_channels, K=8, down_sample=True):
+    def __init__(self, in_channels, conv=SN_Conv2d, K=8, down_sample=True):
         super().__init__()
-        self.f = nn.Conv2d(in_channels, in_channels // K, kernel_size=1)
-        self.g = nn.Conv2d(in_channels, in_channels // K, kernel_size=1)
-        self.h = nn.Conv2d(in_channels, in_channels // 2, kernel_size=1)
-        self.v = nn.Conv2d(in_channels // 2, in_channels, kernel_size=1)
+
+        self.f = conv(in_channels=in_channels, out_channels=in_channels // K, kernel_size=1)
+        self.g = conv(in_channels=in_channels, out_channels=in_channels // K, kernel_size=1)
+        self.h = conv(in_channels=in_channels, out_channels=in_channels // 2, kernel_size=1)
+        self.v = conv(in_channels=in_channels // 2, out_channels=in_channels, kernel_size=1)
 
         # adaptive attention weight
         self.gamma = nn.Parameter(torch.tensor(0., requires_grad=True))
@@ -172,8 +227,8 @@ class SA_Conv2d(nn.Module):
             HW_prime = HW_prime // 4                                        # update (HW)'<-(HW) // 4
 
         g = g.view(B, C // K, HW_prime)                                     # B x (C/K) x (HW)'
-        h = h.view(B, 4 * C // K, HW_prime)                                 # B x (C/2) x (HW)'
+        h = h.view(B, C // 2, HW_prime)                                     # B x (C/2) x (HW)'
 
         beta = self._dot_product_softmax(f, g)                              # B x (HW) x (HW)'
-        s = torch.einsum('ijk,ilk->ijl', h, beta).view(B, 4 * C // K, H, W) # B x (C/2) x H x W
+        s = torch.einsum('ijk,ilk->ijl', h, beta).view(B, C // 2, H, W)     # B x (C/2) x H x W
         return self.gamma * self.v(s) + x                                   # B x C x H x W

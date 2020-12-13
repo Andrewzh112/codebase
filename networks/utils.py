@@ -15,13 +15,12 @@ def initialize_modules(model, nonlinearity='leaky_relu'):
             nn.init.constant_(m.bias, 0)
 
 
-def put_in_list(item):
-    if not isinstance(item, list, tuple) and item is not None:
-        item = [item]
-    return item
-
-
 def load_weights(state_dict_path, models, model_names, optimizers=[], optimizer_names=[], return_val=None, return_vals=None):
+    def put_in_list(item):
+        if not isinstance(item, list, tuple) and item is not None:
+            item = [item]
+        return item
+
     model = put_in_list(models)
     model_names = put_in_list(model_names)
     optimizers = put_in_list(optimizers)
@@ -37,7 +36,7 @@ def load_weights(state_dict_path, models, model_names, optimizers=[], optimizer_
         optimizer.load_state_dict(state_dict[optimizer_name])
 
     if return_val is not None:
-        return state_dict[key]
+        return state_dict[return_val]
 
     if return_vals is not None:
         return {key: state_dict[key] for key in return_vals}

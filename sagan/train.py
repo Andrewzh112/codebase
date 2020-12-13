@@ -11,7 +11,7 @@ from pathlib import Path
 from dcgan.data import get_loaders
 from networks.utils import load_weights
 from sagan.model import Generator, Discriminator
-from sagan.loss import SAGAN_Hinge_loss
+from sagan.loss import Hinge_loss, Wasserstein_GP_Loss
 
 
 parser = argparse.ArgumentParser()
@@ -30,11 +30,12 @@ parser.add_argument('--download', action="store_true", default=False, help='If a
 # training parameters
 parser.add_argument('--lr_G', type=float, default=0.0004, help='Learning rate for generator')
 parser.add_argument('--lr_D', type=float, default=0.0004, help='Learning rate for discriminator')
-parser.add_argument('--betas', type=tuple, default=(0.0, 0.99), help='Betas for Adam optimizer')
+parser.add_argument('--betas', type=tuple, default=(0.0, 0.9), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=50, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--continue_train', action="store_true", default=False, help='Whether to save samples locally')
 parser.add_argument('--devices', type=list, default=[0, 1], help='List of training devices')
+parser.add_argument('--criterion', type=str, default='hinge', help='Loss function [hinge, wasserstein-gp]')
 
 # logging parameters
 parser.add_argument('--data_path', type=str, default='data/img_align_celeba', help='Path to where image data is located')
@@ -60,7 +61,12 @@ def train():
     G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size), device_ids=opt.devices).to(device)
     D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices).to(device)
 
-    criterion = SAGAN_Hinge_loss()
+    if opt.criterion == 'wasserstein-gp':
+        criterion = Wasserstein_GP_Loss()
+    elif opt.criterion == 'hinge':
+        criterion = Hinge_loss()
+    else:
+        raise NotImplementedError('Please choose criterion [hinge, wasserstein-gp]')
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr_G, betas=opt.betas)
     optimizer_D = torch.optim.Adam(D.parameters(), lr=opt.lr_D, betas=opt.betas)
 
@@ -98,6 +104,9 @@ def train():
 
             # compute losses
             d_loss = criterion(fake_logits=logits_fake, real_logits=logits_real, mode='discriminator')
+            if opt.criterion == 'wasserstein-gp':
+                # TODO
+                continue
             g_loss = criterion(fake_logits=D(fakes), mode='generator')
 
             # update discriminator
@@ -125,10 +134,11 @@ def train():
                 # generate image from fixed noise vector
                 with torch.no_grad():
                     samples = G(fixed_z)
+                    samples = (samples + 1) / 2
 
                 # save locally
                 if opt.save_local_samples:
-                    torchvision.utils.save_image(samples, f'{opt.sample_dir}/Interval_{ckpt_iter}.png')
+                    torchvision.utils.save_image(samples, f'{opt.sample_dir}/Interval_{ckpt_iter}.{opt.img_ext}')
 
                 # save sample and loss to tensorboard
                 writer.add_image('Generated Images', torchvision.utils.make_grid(samples), global_step=ckpt_iter)
