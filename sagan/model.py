@@ -27,7 +27,7 @@ class Discriminator(nn.Module):
 class Generator(nn.Module):
     def __init__(self, h_dim, z_dim, img_channels, img_size):
         super().__init__()
-        self.min_hw = (img_size // (2 ** 5)) ** 2
+        self.min_hw = (img_size // (2 ** 4)) ** 2
         self.h_dim = h_dim
         self.project = SN_Linear(in_features=z_dim, out_features=h_dim*8 * self.min_hw ** 2, bias=False)
         self.gen = nn.Sequential(
