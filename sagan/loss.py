@@ -46,7 +46,7 @@ class Wasserstein_GP_Loss(nn.Module):
     def _generator_loss(self, fake_logits):
         return - fake_logits.mean()
 
-    def __discriminator_loss(self, real_logits, fake_logits):
+    def _discriminator_loss(self, real_logits, fake_logits):
         return - real_logits.mean() + fake_logits.mean()
     
     def get_interpolates(self, reals, fakes):
