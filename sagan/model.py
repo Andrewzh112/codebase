@@ -36,7 +36,7 @@ class Generator(nn.Module):
         self.gen = nn.Sequential(
             nn.BatchNorm2d(h_dim*8, momentum=0.9),
             nn.ReLU(),
-            ConvNormAct(h_dim*8, h_dim*8, 'sn', 'up', activation='relu', normalization='bn'),
+            ConvNormAct(h_dim*8, h_dim*8, 'sn', None, activation='relu', normalization='bn'),
             ConvNormAct(h_dim*8, h_dim*8, 'sn', 'up', activation='relu', normalization='bn'),
             ConvNormAct(h_dim*8, h_dim*4, 'sn', 'up', activation='relu', normalization='bn'),
             ConvNormAct(h_dim*4, h_dim*2, 'sn', 'up', activation='relu', normalization='bn'),
