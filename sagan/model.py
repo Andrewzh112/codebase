@@ -11,7 +11,9 @@ class Discriminator(nn.Module):
             SN_Conv2d(in_channels=img_channels, out_channels=h_dim, kernel_size=4, stride=2, padding=1),
             ConvNormAct(h_dim, h_dim*2, 'sn', 'down', activation='lrelu', normalization='bn'),
             ConvNormAct(h_dim*2, h_dim*4, 'sn', 'down', activation='lrelu', normalization='bn'),
+            SA_Conv2d(h_dim*4),
             ConvNormAct(h_dim*4, h_dim*8, 'sn', 'down', activation='lrelu', normalization='bn'),
+            ConvNormAct(h_dim*8, h_dim*8, 'sn', 'down', activation='lrelu', normalization='bn'),
             nn.AdaptiveAvgPool2d(1),
         )
         self.in_features = h_dim*8
@@ -27,12 +29,13 @@ class Discriminator(nn.Module):
 class Generator(nn.Module):
     def __init__(self, h_dim, z_dim, img_channels, img_size):
         super().__init__()
-        self.min_hw = (img_size // (2 ** 4)) ** 2
+        self.min_hw = (img_size // (2 ** 5)) ** 2
         self.h_dim = h_dim
         self.project = SN_Linear(in_features=z_dim, out_features=h_dim*8 * self.min_hw ** 2, bias=False)
         self.gen = nn.Sequential(
             nn.BatchNorm2d(h_dim*8, momentum=0.9),
             nn.ReLU(),
+            ConvNormAct(h_dim*8, h_dim*8, 'sn', 'up', activation='relu', normalization='bn'),
             ConvNormAct(h_dim*8, h_dim*4, 'sn', 'up', activation='relu', normalization='bn'),
             ConvNormAct(h_dim*4, h_dim*2, 'sn', 'up', activation='relu', normalization='bn'),
             SA_Conv2d(h_dim*2),

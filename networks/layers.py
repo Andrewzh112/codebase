@@ -146,7 +146,7 @@ class Linear_Probe(nn.Module):
 class SN_Conv2d(nn.Module):
     def __init__(self, eps=1e-12, **kwargs):
         super().__init__()
-        self.conv = nn.utils.spectral_norm(nn.Conv2d(**kwargs), eps)
+        self.conv = nn.utils.spectral_norm(nn.Conv2d(**kwargs), eps=eps)
 
     def forward(self, x):
         return self.conv(x)
@@ -155,7 +155,7 @@ class SN_Conv2d(nn.Module):
 class SN_ConvTranspose2d(nn.Module):
     def __init__(self, eps=1e-12, **kwargs):
         super().__init__()
-        self.conv = nn.utils.spectral_norm(nn.ConvTranspose2d(**kwargs), self.eps)
+        self.conv = nn.utils.spectral_norm(nn.ConvTranspose2d(**kwargs), eps=eps)
 
     def forward(self, x):
         return self.conv(x)
@@ -164,7 +164,7 @@ class SN_ConvTranspose2d(nn.Module):
 class SN_Linear(nn.Module):
     def __init__(self, eps=1e-12, **kwargs):
         super().__init__()
-        self.fc = nn.utils.spectral_norm(nn.Linear(**kwargs), eps)
+        self.fc = nn.utils.spectral_norm(nn.Linear(**kwargs), eps=eps)
 
     def forward(self, x):
         return self.fc(x)
@@ -173,7 +173,7 @@ class SN_Linear(nn.Module):
 class SN_Embedding(nn.Module):
     def __init__(self, eps=1e-12, **kwargs):
         super().__init__()
-        self.embed = nn.utils.spectral_norm(nn.Embedding(**kwargs), eps)
+        self.embed = nn.utils.spectral_norm(nn.Embedding(**kwargs), eps=eps)
 
     def forward(self, x):
         return self.Embedding(x)

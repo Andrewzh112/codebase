@@ -12,7 +12,8 @@ def initialize_modules(model, nonlinearity='leaky_relu'):
             )
         elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm, nn.Linear)):
             nn.init.normal_(m.weight, 0.0, 0.02)
-            nn.init.constant_(m.bias, 0)
+            if m.bias is not None:
+              nn.init.constant_(m.bias, 0)
 
 
 def load_weights(state_dict_path, models, model_names, optimizers=[], optimizer_names=[], return_val=None, return_vals=None):

@@ -28,9 +28,10 @@ parser.add_argument('--img_ext', type=str, default='jpg', help='The extension of
 parser.add_argument('--download', action="store_true", default=False, help='If auto download CelebA dataset')
 
 # training parameters
-parser.add_argument('--lr_G', type=float, default=0.0004, help='Learning rate for generator')
+parser.add_argument('--lr_G', type=float, default=0.0001, help='Learning rate for generator')
 parser.add_argument('--lr_D', type=float, default=0.0004, help='Learning rate for discriminator')
 parser.add_argument('--betas', type=tuple, default=(0.0, 0.9), help='Betas for Adam optimizer')
+parser.add_argument('--lambda_gp', type=float, default=10., help='Gradient penalty term')
 parser.add_argument('--n_epochs', type=int, default=50, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--continue_train', action="store_true", default=False, help='Whether to save samples locally')
@@ -62,7 +63,7 @@ def train():
     D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices).to(device)
 
     if opt.criterion == 'wasserstein-gp':
-        criterion = Wasserstein_GP_Loss()
+        criterion = Wasserstein_GP_Loss(opt.lambda_gp)
     elif opt.criterion == 'hinge':
         criterion = Hinge_loss()
     else:
@@ -97,27 +98,32 @@ def train():
             reals = reals.to(device)
             z = torch.randn(reals.size(0), opt.z_dim).to(device)
 
-            # forward
+            # forward generator
+            optimizer_G.zero_grad()
             fakes = G(z)
+
+            # compute loss & update gen
+            g_loss = criterion(fake_logits=D(fakes), mode='generator')
+            g_loss.backward()
+            optimizer_G.step()
+
+            # forward discriminator
+            optimizer_D.zero_grad()
             logits_fake = D(fakes.detach())
             logits_real = D(reals)
 
-            # compute losses
+            # compute loss & update disc
             d_loss = criterion(fake_logits=logits_fake, real_logits=logits_real, mode='discriminator')
-            if opt.criterion == 'wasserstein-gp':
-                # TODO
-                continue
-            g_loss = criterion(fake_logits=D(fakes), mode='generator')
 
-            # update discriminator
-            optimizer_D.zero_grad()
+            # if wgangp, calculate gradient penalty and add to current d_loss
+            if opt.criterion == 'wasserstein-gp':
+                interpolates = criterion.get_interpolates(reals, fakes)
+                interpolated_logits = D(interpolates)
+                grad_penalty = criterion.grad_penalty_loss(interpolates, interpolated_logits)
+                d_loss = d_loss + grad_penalty
+
             d_loss.backward()
             optimizer_D.step()
-
-            # update generator
-            optimizer_G.zero_grad()
-            g_loss.backward()
-            optimizer_G.step()
 
             # logging
             d_losses.append(d_loss.item())
