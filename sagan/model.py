@@ -19,7 +19,7 @@ class Discriminator(nn.Module):
         )
         self.in_features = h_dim*8
         self.fc = SN_Linear(in_features=self.in_features, out_features=1)
-        initialize_modules(self)
+        initialize_modules(self, init_type='ortho')
 
     def forward(self, x):
         x = self.disc(x)
@@ -46,7 +46,7 @@ class Generator(nn.Module):
                                stride=2, padding=1),
             nn.Tanh()
         )
-        initialize_modules(self)
+        initialize_modules(self, init_type='ortho')
 
     def forward(self, x):
         batch_size = x.size(0)

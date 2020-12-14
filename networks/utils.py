@@ -2,14 +2,23 @@ from torch import nn
 import torch
 
 
-def initialize_modules(model, nonlinearity='leaky_relu'):
+def initialize_modules(model, nonlinearity='leaky_relu', init_type='kaiming'):
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_normal_(
-                m.weight,
-                mode='fan_out',
-                nonlinearity=nonlinearity
-            )
+            if init_type == 'kaiming':
+                nn.init.kaiming_normal_(
+                    m.weight,
+                    mode='fan_out',
+                    nonlinearity=nonlinearity
+                )
+            elif init_type == 'normal':
+                nn.init.normal_(m.weight, 0.0, 0.02)
+            elif init_type == 'ortho':
+                nn.init.orthogonal_(m.weight)
+            elif init_type in ['glorot', 'xavier']:
+                nn.init.xavier_uniform_(m.weight)
+            else:
+                print('unrecognized init type, using default PyTorch initialization scheme...')
         elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm, nn.Linear)):
             nn.init.normal_(m.weight, 0.0, 0.02)
             if m.bias is not None:
