@@ -5,7 +5,7 @@ from tqdm import tqdm
 import os
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
-from dcgan.data import get_loaders
+from data.unlabelled import get_celeba_loaders
 from dcgan.models import Generator, Discriminator
 
 
@@ -40,8 +40,8 @@ def train():
         os.mkdir(opt.log_dir)
     if not os.path.isdir(opt.sample_dir):
         os.mkdir(opt.sample_dir)
-    loader = get_loaders(opt.data_path, opt.img_ext, opt.crop_size,
-                         opt.img_size, opt.batch_size, opt.download)
+    loader = get_celeba_loaders(opt.data_path, opt.img_ext, opt.crop_size,
+                                opt.img_size, opt.batch_size, opt.download)
     G = Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size)
     D = Discriminator(opt.img_channels, opt.h_dim, opt.img_size)
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr, betas=opt.betas)
@@ -77,7 +77,7 @@ def train():
 
         with torch.no_grad():
             samples = G(fixed_z)
-        # samples = ((samples + 1) / 2).view(-1, opt.img_channels, opt.img_size, opt.img_size)
+            samples = ((samples + 1) / 2).view(-1, opt.img_channels, opt.img_size, opt.img_size)
         writer.add_image('Generated Images', torchvision.utils.make_grid(samples), global_step=epoch)
         writer.add_scalars("Train Losses", {
             "Discriminator Loss": sum(d_losses) / len(d_losses),

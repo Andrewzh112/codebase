@@ -27,7 +27,7 @@ class celebA(Dataset):
         return self.transforms(img)
 
 
-def get_loaders(data_path, img_ext, crop_size, img_size, batch_size, download):
+def get_celeba_loaders(data_path, img_ext, crop_size, img_size, batch_size, download):
     dataset = celebA(data_path, img_ext, crop_size, img_size)
     if download:
         dataset = CelebA('celebA', transform=dataset.transforms, download=True)

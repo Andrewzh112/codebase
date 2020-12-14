@@ -31,7 +31,7 @@ class Generator(nn.Module):
             conv_bn_relu(h_dim*4, h_dim*2, 4, 2, 'relu', 'down'),
             conv_bn_relu(h_dim*2, h_dim, 4, 2, 'relu', 'down'),
             nn.ConvTranspose2d(h_dim, img_channels, 4, 2, 1),
-            nn.Sigmoid()
+            nn.Tanh()
         )
         initialize_weights(self)
 

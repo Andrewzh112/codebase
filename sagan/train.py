@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from dcgan.data import get_loaders
+from data.unlabelled import get_celeba_loaders
 from networks.utils import load_weights
 from sagan.model import Generator, Discriminator
 from sagan.loss import Hinge_loss, Wasserstein_GP_Loss
@@ -71,8 +71,8 @@ def train():
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr_G, betas=opt.betas)
     optimizer_D = torch.optim.Adam(D.parameters(), lr=opt.lr_D, betas=opt.betas)
 
-    loader = get_loaders(opt.data_path, opt.img_ext, opt.crop_size,
-                         opt.img_size, opt.batch_size, opt.download)
+    loader = get_celeba_loaders(opt.data_path, opt.img_ext, opt.crop_size,
+                                opt.img_size, opt.batch_size, opt.download)
     # sample fixed z to see progress through training
     fixed_z = torch.randn(opt.sample_size, opt.z_dim).to(device)
 

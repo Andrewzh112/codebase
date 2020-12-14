@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 from networks.utils import initialize_modules
-from dcgan.data import get_loaders
+from data.unlabelled import get_celeba_loaders
 from vae.model import VAE
 from vae.loss import VAELoss
 
@@ -57,8 +57,8 @@ if __name__ == '__main__':
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
 
-    loader = get_loaders(args.data_path, args.img_ext, args.crop_size,
-                         args.img_size, args.batch_size, args.download)
+    loader = get_celeba_loaders(args.data_path, args.img_ext, args.crop_size,
+                                args.img_size, args.batch_size, args.download)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # initialize model, instantiate opt & scheduler & loss fn
@@ -104,6 +104,7 @@ if __name__ == '__main__':
         model.eval()
         with torch.no_grad():
             sampled_images = model.module.sample(fixed_z)
+            sampled_images = (sampled_images + 1) / 2
 
         # log images and losses & save model parameters
         writer.add_image('Fixed Generated Images', torchvision.utils.make_grid(sampled_images), global_step=epoch)
