@@ -6,7 +6,7 @@ from torch.nn import functional as F
 
 
 class ConvNormAct(nn.Module):
-    def __init__(self, in_channels, out_channels, conv_type='basic', mode=None, activation='relu', normalization='bn', kernel_size=None):
+    def __init__(self, in_channels, out_channels, conv_type='basic', mode=None, activation='relu', normalization='bn', groups=1, kernel_size=None):
         super().__init__()
         # type of convolution
         if conv_type == 'basic' and mode is None or mode == 'down':
@@ -24,26 +24,27 @@ class ConvNormAct(nn.Module):
             if kernel_size is None:
                 kernel_size = 4
             conv = conv(in_channels=in_channels, out_channels=out_channels,
-                        kernel_size=kernel_size, stride=2, padding=1, bias=False)
+                        kernel_size=kernel_size, stride=2, padding=1, groups=groups, bias=False)
         elif mode == 'down':
             if kernel_size is None:
                 kernel_size = 4
             conv = conv(in_channels=in_channels, out_channels=out_channels,
-                        kernel_size=kernel_size, stride=2, padding=1, bias=False)
+                        kernel_size=kernel_size, stride=2, padding=1, groups=groups, bias=False)
         else:
             if kernel_size is None:
                 kernel_size = 3
             conv = conv(in_channels=in_channels, out_channels=out_channels,
-                        kernel_size=kernel_size, stride=1, padding=1, bias=False)
+                        kernel_size=kernel_size, stride=1, padding=1, groups=groups, bias=False)
 
         # normalization
-        # TODO GroupNorm
         if normalization == 'bn':
             norm = nn.BatchNorm2d(out_channels)
         elif normalization == 'ln':
             norm = nn.LayerNorm(out_channels)
         elif normalization == 'in':
             norm = nn.InstanceNorm2d(out_channels)
+        elif normalization == 'gn':
+            norm = nn.GroupNorm(groups, out_channels)
         else:
             raise NotImplementedError('Please only choose normalization [bn, ln, in]')
 
@@ -66,7 +67,7 @@ class ConvNormAct(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_channels, activation, normalization):
+    def __init__(self, in_channels, activation, normalization, groups=1):
         super().__init__()
         if normalization == 'bn':
             norm = nn.BatchNorm2d(in_channels)
@@ -74,6 +75,8 @@ class ResBlock(nn.Module):
             norm = nn.LayerNorm(in_channels)
         elif normalization == 'in':
             norm = nn.InstanceNorm2d(in_channels)
+        elif normalization == 'gn':
+            norm = nn.GroupNorm(groups, in_channels)
         else:
             raise NotImplementedError('Please only choose normalization [bn, ln, in]')
 
@@ -91,6 +94,7 @@ class ResBlock(nn.Module):
                 in_channels,
                 kernel_size=3,
                 padding=1,
+                groups=groups,
             ),
             norm,
             act,
@@ -99,6 +103,7 @@ class ResBlock(nn.Module):
                 in_channels,
                 kernel_size=3,
                 padding=1,
+                groups=groups,
             ),
             norm
         )
