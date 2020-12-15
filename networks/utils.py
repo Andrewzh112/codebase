@@ -19,9 +19,9 @@ def initialize_modules(model, nonlinearity='leaky_relu', init_type='kaiming'):
                 nn.init.xavier_uniform_(m.weight)
             else:
                 print('unrecognized init type, using default PyTorch initialization scheme...')
-        elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm, nn.Linear)):
+        elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm, nn.Linear, nn.LayerNorm, nn.Embedding)):
             nn.init.normal_(m.weight, 0.0, 0.02)
-            if m.bias is not None:
+            if hasattr(m, 'bias') and m.bias is not None:
               nn.init.constant_(m.bias, 0)
 
 

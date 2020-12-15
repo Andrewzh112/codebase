@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 from torch.utils.data import DataLoader
-from utils.data import SimpleDataset
+from data.labelled import SimpleDataset
 from torch.nn import functional as F
 
 
