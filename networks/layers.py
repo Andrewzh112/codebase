@@ -46,7 +46,7 @@ class ConvNormAct(nn.Module):
         elif normalization == 'gn':
             norm = nn.GroupNorm(groups, out_channels)
         else:
-            raise NotImplementedError('Please only choose normalization [bn, ln, in]')
+            raise NotImplementedError('Please only choose normalization [bn, ln, in, gn]')
 
         # activations
         if activation == 'relu':
@@ -78,7 +78,7 @@ class ResBlock(nn.Module):
         elif normalization == 'gn':
             norm = nn.GroupNorm(groups, in_channels)
         else:
-            raise NotImplementedError('Please only choose normalization [bn, ln, in]')
+            raise NotImplementedError('Please only choose normalization [bn, ln, in, gn]')
 
         # activations
         if activation == 'relu':
