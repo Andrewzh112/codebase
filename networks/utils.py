@@ -27,7 +27,7 @@ def initialize_modules(model, nonlinearity='leaky_relu', init_type='kaiming'):
 
 def load_weights(state_dict_path, models, model_names, optimizers=[], optimizer_names=[], return_val=None, return_vals=None):
     def put_in_list(item):
-        if not isinstance(item, list, tuple) and item is not None:
+        if not isinstance(item, (list, tuple)) and item is not None:
             item = [item]
         return item
 

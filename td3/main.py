@@ -79,12 +79,13 @@ if __name__ == '__main__':
         score_history.append(score)
         moving_avg = sum(score_history) / len(score_history)
         agent.add_scalar('Average Score', moving_avg, global_step=e)
-        tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
-                Episode Score: {score}, \
-                Average Score: {moving_avg}, \
-                Best Score: {best_score}')
 
         # save weights @ best score
         if moving_avg > best_score:
             best_score = moving_avg
             agent.save_networks()
+
+        tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
+                Episode Score: {score}, \
+                Average Score: {moving_avg}, \
+                Best Score: {best_score}')
