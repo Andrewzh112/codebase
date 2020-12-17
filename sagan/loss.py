@@ -48,7 +48,7 @@ class Wasserstein_GP_Loss(nn.Module):
 
     def _discriminator_loss(self, real_logits, fake_logits):
         return - real_logits.mean() + fake_logits.mean()
-    
+
     def get_interpolates(self, reals, fakes):
         alpha = torch.rand(reals.size(0), 1, 1, 1).expand_as(reals).to(reals.device)
         interpolates = alpha * reals.data + ((1 - alpha) * fakes.data)

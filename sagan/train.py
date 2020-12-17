@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 
 from data.unlabelled import get_celeba_loaders
+from data.labelled import get_cifar_loader
+from utils.data import get_random_labels
 from networks.utils import load_weights
 from sagan.model import Generator, Discriminator
 from sagan.loss import Hinge_loss, Wasserstein_GP_Loss
@@ -34,6 +36,7 @@ parser.add_argument('--betas', type=tuple, default=(0.0, 0.9), help='Betas for A
 parser.add_argument('--lambda_gp', type=float, default=10., help='Gradient penalty term')
 parser.add_argument('--n_epochs', type=int, default=50, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
+parser.add_argument('--conditional', action="store_true", default=False, help='Whether training cGAN')
 parser.add_argument('--continue_train', action="store_true", default=False, help='Whether to save samples locally')
 parser.add_argument('--devices', type=list, default=[0, 1], help='List of training devices')
 parser.add_argument('--criterion', type=str, default='hinge', help='Loss function [hinge, wasserstein-gp]')
@@ -59,8 +62,15 @@ def train():
     writer = SummaryWriter(opt.log_dir + f'/{int(datetime.now().timestamp()*1e6)}')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size), device_ids=opt.devices).to(device)
-    D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices).to(device)
+    if opt.conditional:
+        loader, num_classes = get_cifar_loader(opt.batch_size, opt.crop_size, opt.img_size)
+    else:
+        num_classes = 0
+        loader = get_celeba_loaders(opt.data_path, opt.img_ext, opt.crop_size,
+                                    opt.img_size, opt.batch_size, opt.download)
+
+    G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size), device_ids=opt.devices, num_classes=num_classes).to(device)
+    D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices, num_classes=num_classes).to(device)
 
     if opt.criterion == 'wasserstein-gp':
         criterion = Wasserstein_GP_Loss(opt.lambda_gp)
@@ -71,8 +81,6 @@ def train():
     optimizer_G = torch.optim.Adam(G.parameters(), lr=opt.lr_G, betas=opt.betas)
     optimizer_D = torch.optim.Adam(D.parameters(), lr=opt.lr_D, betas=opt.betas)
 
-    loader = get_celeba_loaders(opt.data_path, opt.img_ext, opt.crop_size,
-                                opt.img_size, opt.batch_size, opt.download)
     # sample fixed z to see progress through training
     fixed_z = torch.randn(opt.sample_size, opt.z_dim).to(device)
 
@@ -93,24 +101,36 @@ def train():
         d_losses, g_losses = [], []
         D.train()
         G.train()
-        for batch_idx, reals in enumerate(loader):
-            # preping data
-            reals = reals.to(device)
+        for batch_idx, data in enumerate(loader):
+            # data prep
+            if opt.conditional:
+                reals, labels = data
+                reals, labels = reals.to(device), labels.to(device)
+                fake_labels = get_random_labels(num_classes, opt.batch_size, device)
+            else:
+                reals = data.to(device)
             z = torch.randn(reals.size(0), opt.z_dim).to(device)
 
             # forward generator
             optimizer_G.zero_grad()
-            fakes = G(z)
+            if opt.conditional:
+                fakes = G(z, fake_labels)
+                g_loss = criterion(fake_logits=D(fakes), mode='generator')
+            else:
+                fakes = G(z)
 
-            # compute loss & update gen
-            g_loss = criterion(fake_logits=D(fakes), mode='generator')
+            # update gen
             g_loss.backward()
             optimizer_G.step()
 
             # forward discriminator
             optimizer_D.zero_grad()
-            logits_fake = D(fakes.detach())
-            logits_real = D(reals)
+            if opt.conditional:
+                logits_fake = D(fakes.detach(), fake_labels)
+                logits_real = D(reals, labels)
+            else:
+                logits_fake = D(fakes.detach())
+                logits_real = D(reals)
 
             # compute loss & update disc
             d_loss = criterion(fake_logits=logits_fake, real_logits=logits_real, mode='discriminator')
@@ -118,7 +138,10 @@ def train():
             # if wgangp, calculate gradient penalty and add to current d_loss
             if opt.criterion == 'wasserstein-gp':
                 interpolates = criterion.get_interpolates(reals, fakes)
-                interpolated_logits = D(interpolates)
+                if opt.conditional:
+                    interpolated_logits = D(interpolates, labels)
+                else:
+                    interpolated_logits = D(interpolates)
                 grad_penalty = criterion.grad_penalty_loss(interpolates, interpolated_logits)
                 d_loss = d_loss + grad_penalty
 

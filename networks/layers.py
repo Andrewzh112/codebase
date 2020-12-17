@@ -23,43 +23,43 @@ class ConvNormAct(nn.Module):
         if mode == 'up':
             if kernel_size is None:
                 kernel_size = 4
-            conv = conv(in_channels=in_channels, out_channels=out_channels,
+            self.conv = conv(in_channels=in_channels, out_channels=out_channels,
                         kernel_size=kernel_size, stride=2, padding=1, groups=groups, bias=False)
         elif mode == 'down':
             if kernel_size is None:
                 kernel_size = 4
-            conv = conv(in_channels=in_channels, out_channels=out_channels,
+            self.conv = conv(in_channels=in_channels, out_channels=out_channels,
                         kernel_size=kernel_size, stride=2, padding=1, groups=groups, bias=False)
         else:
             if kernel_size is None:
                 kernel_size = 3
-            conv = conv(in_channels=in_channels, out_channels=out_channels,
+            self.conv = conv(in_channels=in_channels, out_channels=out_channels,
                         kernel_size=kernel_size, stride=1, padding=1, groups=groups, bias=False)
 
         # normalization
         if normalization == 'bn':
-            norm = nn.BatchNorm2d(out_channels)
+            self.norm = nn.BatchNorm2d(out_channels)
         elif normalization == 'ln':
-            norm = nn.LayerNorm(out_channels)
+            self.norm = nn.LayerNorm(out_channels)
         elif normalization == 'in':
-            norm = nn.InstanceNorm2d(out_channels)
+            self.norm = nn.InstanceNorm2d(out_channels)
         elif normalization == 'gn':
-            norm = nn.GroupNorm(groups, out_channels)
+            self.norm = nn.GroupNorm(groups, out_channels)
         else:
             raise NotImplementedError('Please only choose normalization [bn, ln, in, gn]')
 
         # activations
         if activation == 'relu':
-            act = nn.ReLU()
+            self.act = nn.ReLU()
         elif activation == 'lrelu':
-            act = nn.LeakyReLU(0.2)
+            self.act = nn.LeakyReLU(0.2)
         else:
             raise NotImplementedError('Please only choose activation [relu, lrelu]')
 
         self.block = nn.Sequential(
-            conv,
-            norm,
-            act
+            self.conv,
+            self.norm,
+            self.act
         )
 
     def forward(self, x):

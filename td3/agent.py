@@ -41,7 +41,7 @@ class Agent:
         self.checkpoint_dir = checkpoint_dir
 
         # networks & optimizers
-        self.actor = Actor(state_space, hidden_dims, n_actions, 'actor').to(self.device)
+        self.actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'actor').to(self.device)
         self.critic_1 = Critic(state_space, hidden_dims, n_actions, 'critic_1').to(self.device)
         self.critic_2 = Critic(state_space, hidden_dims, n_actions, 'critic_2').to(self.device)
 
@@ -49,7 +49,7 @@ class Agent:
             chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
 
-        self.target_actor = Actor(state_space, hidden_dims, n_actions, 'target_actor').to(self.device)
+        self.target_actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'target_actor').to(self.device)
         self.target_critic_1 = Critic(state_space, hidden_dims, n_actions, 'target_critic_1').to(self.device)
         self.target_critic_2 = Critic(state_space, hidden_dims, n_actions, 'target_critic_2').to(self.device)
 

@@ -24,9 +24,10 @@ class Critic(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, input_dims, hidden_dims, n_actions, name):
+    def __init__(self, input_dims, hidden_dims, n_actions, max_action, name):
         super().__init__()
         self.name = name
+        self.max_action = max_action
 
         fcs = []
         prev_dim = input_dims
@@ -40,4 +41,4 @@ class Actor(nn.Module):
         self.pi = nn.Sequential(*fcs)
 
     def forward(self, state):
-        return self.pi(state)
+        return self.max_action * self.pi(state)
