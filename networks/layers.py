@@ -181,7 +181,7 @@ class SN_Embedding(nn.Module):
         self.embed = nn.utils.spectral_norm(nn.Embedding(**kwargs), eps=eps)
 
     def forward(self, x):
-        return self.Embedding(x)
+        return self.embed(x)
 
 
 class SA_Conv2d(nn.Module):

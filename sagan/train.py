@@ -38,7 +38,7 @@ parser.add_argument('--n_epochs', type=int, default=50, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--conditional', action="store_true", default=False, help='Whether training cGAN')
 parser.add_argument('--continue_train', action="store_true", default=False, help='Whether to save samples locally')
-parser.add_argument('--devices', type=list, default=[0, 1], help='List of training devices')
+parser.add_argument('--devices', type=list, default=[0], help='List of training devices')
 parser.add_argument('--criterion', type=str, default='hinge', help='Loss function [hinge, wasserstein-gp]')
 
 # logging parameters
@@ -69,8 +69,8 @@ def train():
         loader = get_celeba_loaders(opt.data_path, opt.img_ext, opt.crop_size,
                                     opt.img_size, opt.batch_size, opt.download)
 
-    G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size), device_ids=opt.devices, num_classes=num_classes).to(device)
-    D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size), device_ids=opt.devices, num_classes=num_classes).to(device)
+    G = torch.nn.DataParallel(Generator(opt.h_dim, opt.z_dim, opt.img_channels, opt.img_size, num_classes=num_classes), device_ids=opt.devices).to(device)
+    D = torch.nn.DataParallel(Discriminator(opt.img_channels, opt.h_dim, opt.img_size, num_classes=num_classes), device_ids=opt.devices).to(device)
 
     if opt.criterion == 'wasserstein-gp':
         criterion = Wasserstein_GP_Loss(opt.lambda_gp)
@@ -105,10 +105,10 @@ def train():
             # data prep
             if opt.conditional:
                 reals, labels = data
-                reals, labels = reals.to(device), labels.to(device)
-                fake_labels = get_random_labels(num_classes, opt.batch_size, device)
+                reals, labels = torch.nn.functional.interpolate(reals, size=opt.img_size).to(device), labels.to(device)
+                fake_labels = get_random_labels(num_classes, reals.size(0), device)
             else:
-                reals = data.to(device)
+                reals = torch.nn.functional.interpolate(data, size=opt.img_size).to(device)
             z = torch.randn(reals.size(0), opt.z_dim).to(device)
 
             # forward generator
@@ -162,7 +162,11 @@ def train():
                 G.eval()
                 # generate image from fixed noise vector
                 with torch.no_grad():
-                    samples = G(fixed_z)
+                    if opt.conditional:
+                        fake_labels = get_random_labels(num_classes, opt.sample_size, device)
+                        samples = G(fixed_z, fake_labels)
+                    else:
+                        samples = G(fixed_z)
                     samples = (samples + 1) / 2
 
                 # save locally

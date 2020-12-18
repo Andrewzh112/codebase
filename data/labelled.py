@@ -24,5 +24,5 @@ def get_cifar_loader(batch_size, crop_size, img_size):
         torchvision.transforms.ToTensor(),
         Range
     ])
-    dataset = torchvision.datasets.CIFAR10(root='.', train=True, transform=transforms, download=True)
+    dataset = torchvision.datasets.CIFAR10(root='data', train=True, transform=transforms, download=True)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True), len(dataset.classes)
