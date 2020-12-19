@@ -83,6 +83,8 @@ def train():
 
     # sample fixed z to see progress through training
     fixed_z = torch.randn(opt.sample_size, opt.z_dim).to(device)
+    if opt.conditional:
+        fixed_fake_labels = get_random_labels(num_classes, opt.sample_size, device)
 
     # if continue training, load weights, otherwise starting epoch=0
     if opt.continue_train:
@@ -104,20 +106,17 @@ def train():
         for batch_idx, data in enumerate(loader):
             # data prep
             if opt.conditional:
-                reals, labels = data
-                reals, labels = torch.nn.functional.interpolate(reals, size=opt.img_size).to(device), labels.to(device)
+                reals, labels = [d.to(device) for d in data]
                 fake_labels = get_random_labels(num_classes, reals.size(0), device)
             else:
-                reals = torch.nn.functional.interpolate(data, size=opt.img_size).to(device)
+                reals = data.to(device)
+                fake_labels, labels = None, None
             z = torch.randn(reals.size(0), opt.z_dim).to(device)
 
             # forward generator
             optimizer_G.zero_grad()
-            if opt.conditional:
-                fakes = G(z, fake_labels)
-                g_loss = criterion(fake_logits=D(fakes), mode='generator')
-            else:
-                fakes = G(z)
+            fakes = G(z, fake_labels)
+            g_loss = criterion(fake_logits=D(fakes, fake_labels), mode='generator')
 
             # update gen
             g_loss.backward()
@@ -125,12 +124,8 @@ def train():
 
             # forward discriminator
             optimizer_D.zero_grad()
-            if opt.conditional:
-                logits_fake = D(fakes.detach(), fake_labels)
-                logits_real = D(reals, labels)
-            else:
-                logits_fake = D(fakes.detach())
-                logits_real = D(reals)
+            logits_fake = D(fakes.detach(), fake_labels)
+            logits_real = D(reals, labels)
 
             # compute loss & update disc
             d_loss = criterion(fake_logits=logits_fake, real_logits=logits_real, mode='discriminator')
@@ -138,10 +133,7 @@ def train():
             # if wgangp, calculate gradient penalty and add to current d_loss
             if opt.criterion == 'wasserstein-gp':
                 interpolates = criterion.get_interpolates(reals, fakes)
-                if opt.conditional:
-                    interpolated_logits = D(interpolates, labels)
-                else:
-                    interpolated_logits = D(interpolates)
+                interpolated_logits = D(interpolates, labels)
                 grad_penalty = criterion.grad_penalty_loss(interpolates, interpolated_logits)
                 d_loss = d_loss + grad_penalty
 
@@ -163,8 +155,7 @@ def train():
                 # generate image from fixed noise vector
                 with torch.no_grad():
                     if opt.conditional:
-                        fake_labels = get_random_labels(num_classes, opt.sample_size, device)
-                        samples = G(fixed_z, fake_labels)
+                        samples = G(fixed_z, fixed_fake_labels)
                     else:
                         samples = G(fixed_z)
                     samples = (samples + 1) / 2
