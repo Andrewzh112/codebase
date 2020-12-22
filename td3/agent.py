@@ -6,14 +6,20 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from td3.utils import ReplayBuffer
-from td3.networks import Actor, Critic
+from td3.networks import Actor, Critic, ImageActor, ImageCritic
 
 
 class Agent:
     def __init__(self, env, alpha, beta, hidden_dims, tau,
                  batch_size, gamma, d, warmup, max_size, c,
-                 sigma, one_device, log_dir, checkpoint_dir):
-        state_space = env.observation_space.shape[0]
+                 sigma, one_device, log_dir, checkpoint_dir,
+                 img_input, in_channels, order, depth, multiplier,
+                 action_embed_dim, hidden_dim, crop_dim):
+        if img_input:
+            input_dim = [in_channels*order, crop_dim, crop_dim]
+        else:
+            input_dim = env.observation_space.shape
+            state_space = input_dim[0]
         n_actions = env.action_space.shape[0]
 
         # training params
@@ -21,7 +27,7 @@ class Agent:
         self.tau = tau
         self.max_action = env.action_space.high[0]
         self.min_action = env.action_space.low[0]
-        self.buffer = ReplayBuffer(max_size, state_space, n_actions)
+        self.buffer = ReplayBuffer(max_size, input_dim, n_actions)
         self.batch_size = batch_size
         self.learn_step_counter = 0
         self.time_step = 0
@@ -30,6 +36,7 @@ class Agent:
         self.d = d
         self.c = c
         self.sigma = sigma
+        self.img_input = img_input
 
         # training device
         if one_device:
@@ -41,17 +48,32 @@ class Agent:
         self.checkpoint_dir = checkpoint_dir
 
         # networks & optimizers
-        self.actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'actor').to(self.device)
-        self.critic_1 = Critic(state_space, hidden_dims, n_actions, 'critic_1').to(self.device)
-        self.critic_2 = Critic(state_space, hidden_dims, n_actions, 'critic_2').to(self.device)
+        if img_input:
+            self.actor = ImageActor(in_channels, n_actions, self.max_action, order, depth, multiplier, 'actor').to(self.device)
+            self.critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'critic_1').to(self.device)
+            self.critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'critic_2').to(self.device)
 
-        self.critic_optimizer = torch.optim.Adam(
-            chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
+            self.critic_optimizer = torch.optim.Adam(
+                chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
+            self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
 
-        self.target_actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'target_actor').to(self.device)
-        self.target_critic_1 = Critic(state_space, hidden_dims, n_actions, 'target_critic_1').to(self.device)
-        self.target_critic_2 = Critic(state_space, hidden_dims, n_actions, 'target_critic_2').to(self.device)
+            self.target_actor = ImageActor(in_channels, n_actions, self.max_action, order, depth, multiplier, 'target_actor').to(self.device)
+            self.target_critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'target_critic_1').to(self.device)
+            self.target_critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'target_critic_2').to(self.device)
+
+        # physics networks
+        else:
+            self.actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'actor').to(self.device)
+            self.critic_1 = Critic(state_space, hidden_dims, n_actions, 'critic_1').to(self.device)
+            self.critic_2 = Critic(state_space, hidden_dims, n_actions, 'critic_2').to(self.device)
+
+            self.critic_optimizer = torch.optim.Adam(
+                chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
+            self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
+
+            self.target_actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'target_actor').to(self.device)
+            self.target_critic_1 = Critic(state_space, hidden_dims, n_actions, 'target_critic_1').to(self.device)
+            self.target_critic_2 = Critic(state_space, hidden_dims, n_actions, 'target_critic_2').to(self.device)
 
         # copy weights
         self.update_network_parameters(tau=1)

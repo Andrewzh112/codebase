@@ -4,10 +4,13 @@ https://www.youtube.com/watch?v=ZhFO8EWADmY&ab_channel=MachineLearningwithPhil
 
 import argparse
 import gym
+from gym.wrappers.pixel_observation import PixelObservationWrapper
 from tqdm import tqdm
 from pathlib import Path
 from collections import deque
+import torch
 
+from td3.utils import preprocess_img
 from td3.agent import Agent
 
 
@@ -20,6 +23,15 @@ parser.add_argument('--tau', type=float, default=0.005, help='Soft update param'
 parser.add_argument('--gamma', type=float, default=0.99, help='Reward discount factor')
 parser.add_argument('--sigma', type=float, default=0.2, help='Gaussian noise standard deviation')
 parser.add_argument('--c', type=float, default=0.5, help='Noise clip')
+# for image input agent
+parser.add_argument('--img_input', action="store_true", default=False, help='Use image as states')
+parser.add_argument('--in_channels', type=int, default=3, help='Number of image channels for image input')
+parser.add_argument('--depth', type=int, default=3, help='Depth for CNN architecture for image input')
+parser.add_argument('--multiplier', type=int, default=64, help='Channel multiplier for CNN architecture for image input')
+parser.add_argument('--order', type=int, default=3, help='Store past (order) of frames for image input')
+parser.add_argument('--action_embed_dim', type=int, default=32, help='Embedding dimension for actions for image input')
+parser.add_argument('--hidden_dim', type=list, default=1028, help='List of hidden dims for embedding networks')
+parser.add_argument('--crop_dim', type=list, default=32, help='Crop dim for image inputs')
 
 # training hp params
 parser.add_argument('--n_episodes', type=int, default=1000, help='Number of episodes')
@@ -47,9 +59,14 @@ if __name__ == '__main__':
 
     # env & agent
     env = gym.make(args.env_name)
+    if args.img_input:
+        env.reset()
+        env = PixelObservationWrapper(env)
     agent = Agent(env, args.alpha, args.beta, args.hidden_dims, args.tau, args.batch_size,
                   args.gamma, args.d, args.warmup, args.max_size, args.c, args.sigma,
-                  args.one_device, args.log_dir, args.checkpoint_dir)
+                  args.one_device, args.log_dir, args.checkpoint_dir, args.img_input,
+                  args.in_channels, args.order, args.depth, args.multiplier,
+                  args.action_embed_dim, args.hidden_dim, args.crop_dim)
 
     best_score = env.reward_range[0]
     score_history = deque([], maxlen=args.window_size)
@@ -58,12 +75,20 @@ if __name__ == '__main__':
     for e in episodes:
         # resetting
         state = env.reset()
+        if args.img_input:
+            state_queue = next_state_queue = deque(
+                [preprocess_img(state['pixels'], args.crop_dim) for _ in range(args.order)],
+                maxlen=args.order)
+            state = torch.cat(list(state_queue), 1)
         done = False
         score = 0
 
         while not done:
             action = agent.choose_action(state)
             state_, reward, done, _ = env.step(action)
+            if args.img_input:
+                state_queue.append(preprocess_img(state_['pixels'], args.crop_dim))
+                state_ = torch.cat(list(state_queue), 1).cpu().numpy()
             agent.remember(state, action, reward, state_, done)
             agent.learn()
 
