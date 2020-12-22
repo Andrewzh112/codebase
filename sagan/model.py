@@ -3,7 +3,7 @@ import torch
 from networks.layers import (ConvNormAct, SN_Linear, SN_Embedding,
                              SN_Conv2d, SN_ConvTranspose2d, SA_Conv2d)
 from networks.utils import initialize_modules
-from sagan.layers import ConditionalConvBNAct, CategoricalConditionalBatchNorm2d, ConditionalNorm
+from sagan.layers import ConditionalConvBNAct, ConditionalNorm
 
 
 class Discriminator(nn.Module):
@@ -13,7 +13,6 @@ class Discriminator(nn.Module):
             ConvNormAct(img_channels, h_dim, 'sn', 'down', activation='lrelu', normalization='bn'),
             SA_Conv2d(h_dim),
             ConvNormAct(h_dim, h_dim*2, 'sn', 'down', activation='lrelu', normalization='bn'),
-            SA_Conv2d(h_dim*2),
             ConvNormAct(h_dim*2, h_dim*4, 'sn', 'down', activation='lrelu', normalization='bn'),
             ConvNormAct(h_dim*4, h_dim*8, 'sn', 'down', activation='lrelu', normalization='bn'),
             ConvNormAct(h_dim*8, h_dim*8, 'sn', 'down', activation='lrelu', normalization='bn'),
@@ -45,7 +44,6 @@ class Generator(nn.Module):
             ConditionalConvBNAct(h_dim*8, h_dim*8, 'sn', 'up', activation='relu', normalization='bn', num_classes=num_classes),
             ConditionalConvBNAct(h_dim*8, h_dim*4, 'sn', 'up', activation='relu', normalization='bn', num_classes=num_classes),
             ConditionalConvBNAct(h_dim*4, h_dim*2, 'sn', 'up', activation='relu', normalization='bn', num_classes=num_classes),
-            SA_Conv2d(h_dim*2),
             ConditionalConvBNAct(h_dim*2, h_dim, 'sn', 'up', activation='relu', normalization='bn', num_classes=num_classes),
             SA_Conv2d(h_dim),
             SN_ConvTranspose2d(in_channels=h_dim, out_channels=img_channels, kernel_size=4,

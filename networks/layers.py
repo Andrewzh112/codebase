@@ -195,7 +195,7 @@ class SA_Conv2d(nn.Module):
         self.v = conv(in_channels=in_channels // 2, out_channels=in_channels, kernel_size=1)
 
         # adaptive attention weight
-        self.gamma = nn.Parameter(torch.tensor(0., requires_grad=True))
+        self.gamma = nn.Parameter(torch.zeros(1))
 
         self.down_sample = down_sample
         self.K = K

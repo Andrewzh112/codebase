@@ -14,19 +14,19 @@ class Hinge_loss(nn.Module):
         if mode == 'generator':
             return self._generator_loss(fake_logits)
         return self._discriminator_loss(real_logits, fake_logits)
-
-    def _generator_loss(self, fake_logits):
-        if self.reduction == 'mean':
-            return -fake_logits.mean(0)
-        elif self.reduction == 'sum':
-            return -fake_logits.sum(0)
-
-    def _discriminator_loss(self, real_logits, fake_logits):
-        loss = torch.clamp(1 - real_logits, 0) + torch.clamp(1 + fake_logits, 0)
+    
+    def _reduct_loss(self, loss):
         if self.reduction == 'mean':
             return loss.mean(0)
         elif self.reduction == 'sum':
             return loss.sum(0)
+
+    def _generator_loss(self, fake_logits):
+        return self._reduct_loss(-fake_logits)
+
+    def _discriminator_loss(self, real_logits, fake_logits):
+        loss = torch.clamp(1 - real_logits, 0) + torch.clamp(1 + fake_logits, 0)
+        return self._reduct_loss(loss)
 
 
 class Wasserstein_GP_Loss(nn.Module):
