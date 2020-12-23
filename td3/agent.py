@@ -83,7 +83,7 @@ class Agent:
         if clip:
             noise = noise.clamp(-self.c, self.c)
         return noise
-    
+
     def _clamp_action_bound(self, action):
         return action.clamp(self.min_action, self.max_action)
 
