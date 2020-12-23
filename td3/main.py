@@ -37,7 +37,7 @@ parser.add_argument('--crop_dim', type=int, default=32, help='Crop dim for image
 
 # training hp params
 parser.add_argument('--n_episodes', type=int, default=1000, help='Number of episodes')
-parser.add_argument('--batch_size', type=int, default=100, help='Batch size')
+parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
 parser.add_argument('--alpha', type=float, default=0.001, help='Learning rate actor')
 parser.add_argument('--beta', type=float, default=0.001, help='Learning rate critic')
 parser.add_argument('--warmup', type=int, default=1000, help='Number of warmup steps')

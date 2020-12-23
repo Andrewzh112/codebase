@@ -53,10 +53,6 @@ class Agent:
             self.critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'critic_1').to(self.device)
             self.critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'critic_2').to(self.device)
 
-            self.critic_optimizer = torch.optim.Adam(
-                chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
-            self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
-
             self.target_actor = ImageActor(in_channels, n_actions, self.max_action, order, depth, multiplier, 'target_actor').to(self.device)
             self.target_critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'target_critic_1').to(self.device)
             self.target_critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'target_critic_2').to(self.device)
@@ -67,13 +63,13 @@ class Agent:
             self.critic_1 = Critic(state_space, hidden_dims, n_actions, 'critic_1').to(self.device)
             self.critic_2 = Critic(state_space, hidden_dims, n_actions, 'critic_2').to(self.device)
 
-            self.critic_optimizer = torch.optim.Adam(
-                chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
-            self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
-
             self.target_actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'target_actor').to(self.device)
             self.target_critic_1 = Critic(state_space, hidden_dims, n_actions, 'target_critic_1').to(self.device)
             self.target_critic_2 = Critic(state_space, hidden_dims, n_actions, 'target_critic_2').to(self.device)
+
+        self.critic_optimizer = torch.optim.Adam(
+                chain(self.critic_1.parameters(), self.critic_2.parameters()), lr=beta)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=alpha)
 
         # copy weights
         self.update_network_parameters(tau=1)
@@ -87,8 +83,8 @@ class Agent:
     def _clamp_action_bound(self, action):
         return action.clamp(self.min_action, self.max_action)
 
-    def choose_action(self, observation):
-        if self.time_step < self.warmup:
+    def choose_action(self, observation, rendering=False):
+        if self.time_step < self.warmup or not rendering:
             mu = self._get_noise(clip=False)
         else:
             state = torch.tensor(observation, dtype=torch.float).to(self.device)
