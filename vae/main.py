@@ -40,6 +40,7 @@ parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for 
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
+parser.add_argument('--data_parallel', action="store_true", default=False, help='train with data parallel')
 
 # logging
 parser.add_argument('--log_dir', type=str, default='vae/logs', help='Path to where log files will be saved')
@@ -67,14 +68,12 @@ if __name__ == '__main__':
 
     # initialize model, instantiate opt & scheduler & loss fn
     if args.plus:
-        # model = torch.nn.DataParallel(
-        #     VAE_Plus(args.z_dim, args.model_dim, args.img_size, args.img_channels),
-        #     device_ids=args.device_ids).to(device)
         model = VAE_Plus(args.z_dim, args.model_dim, args.img_size, args.img_channels).to(device)
     else:
-        model = torch.nn.DataParallel(
-            VAE(args.z_dim, args.model_dim, args.img_size, args.img_channels, args.n_res_blocks),
-            device_ids=args.device_ids).to(device)
+        model = VAE(args.z_dim, args.model_dim, args.img_size, args.img_channels, args.n_res_blocks).to(device)
+
+    if args.data_parallel:
+        model = torch.nn.DataParallel(model, device_ids=args.device_ids).to(device)
 
     model.apply(initialize_modules)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=args.betas)
@@ -137,7 +136,10 @@ if __name__ == '__main__':
         # decode fixed z latent vectors
         model.eval()
         with torch.no_grad():
-            sampled_images = model.module.sample(fixed_z)
+            if args.data_parallel:
+                sampled_images = model.module.sample(fixed_z)
+            else:
+                sampled_images = model.sample(fixed_z)
             sampled_images = (sampled_images + 1) / 2
 
         # log images and losses & save model parameters
