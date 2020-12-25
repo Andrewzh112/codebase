@@ -101,13 +101,13 @@ if __name__ == '__main__':
             # return kdl & recon loss for logging purposes
             loss, recon_loss, kld_loss = criterion(x, x_hat, mu, logvar)
 
-            # if there is a sparsity loss
+            # if there is sparsity loss
             if args.plus:
                 std = logvar.mul(0.5).exp_()
                 sparsity_loss = GroupSparsityLoss(args.n_zelements)(mu) + \
                     GroupSparsityLoss(args.n_pelements)(z_p)
                 loss += args.gamma * sparsity_loss
-                s_loss.append(sparsity_loss.item())
+                s_loss.append(args.gamma * sparsity_loss.item())
 
             # logging and updating parameters
             losses.append(loss.item())
@@ -140,11 +140,12 @@ if __name__ == '__main__':
             else:
                 sampled_images = model.sample(fixed_z)
             sampled_images = (sampled_images + 1) / 2
+        x_images, x_hat_images = (x.detach() + 1) / 2, (x_hat.detach() + 1) / 2
 
         # log images and losses & save model parameters
         writer.add_image('Fixed Generated Images', torchvision.utils.make_grid(sampled_images), global_step=epoch)
-        writer.add_image('Reconstructed Images', torchvision.utils.make_grid(x_hat.detach()), global_step=epoch)
-        writer.add_image('Original Images', torchvision.utils.make_grid(x.detach()), global_step=epoch)
+        writer.add_image('Reconstructed Images', torchvision.utils.make_grid(x_hat_images), global_step=epoch)
+        writer.add_image('Original Images', torchvision.utils.make_grid(x_images), global_step=epoch)
         tqdm.write(
             f'Epoch {epoch + 1}/{args.n_epochs}, \
                 Loss: {sum(losses) / len(losses):.3f}, \
