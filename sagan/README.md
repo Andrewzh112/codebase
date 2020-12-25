@@ -1,0 +1,2 @@
+[Self-Attention Generative Adversarial Networks](https://arxiv.org/abs/1805.08318)
+[Zhang, Han & Goodfellow, Ian & Metaxas, Dimitris & Odena, Augustus. (2018). Self-Attention Generative Adversarial Networks. ]

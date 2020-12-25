@@ -1,0 +1,2 @@
+[Momentum Contrast for Unsupervised Visual Representation Learning](https://arxiv.org/abs/1911.05722)
+[He, Kaiming & Fan, Haoqi & Wu, Yuxin & Xie, Saining & Girshick, Ross. (2020). Momentum Contrast for Unsupervised Visual Representation Learning. 9726-9735. 10.1109/CVPR42600.2020.00975. ]

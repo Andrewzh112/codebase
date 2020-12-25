@@ -1,0 +1,2 @@
+[Addressing Function Approximation Error in Actor-Critic Methods](https://arxiv.org/abs/1802.09477)
+[Fujimoto, Scott & Hoof, Herke & Meger, Dave. (2018). Addressing Function Approximation Error in Actor-Critic Methods. ]
