@@ -44,7 +44,7 @@ class GroupSparsityLoss(nn.Module):
         # apply mask to extract groups
         mask = torch.block_diag(
             *[torch.ones(n_elements) for i in range(groups)]
-        ).unsqueeze(0).repeat(batch_size, 1, 1)
+        ).unsqueeze(0).repeat(batch_size, 1, 1).to(z.device)
         z_groups = z.unsqueeze(1).repeat(1, groups, 1)
         masked_z = z_groups * mask
         return masked_z.norm(p=2, dim=-1).sum(-1).mean()

@@ -26,12 +26,12 @@ parser.add_argument('--z_dim', type=float, default=100, help='dimension of rando
 parser.add_argument('--n_res_blocks', type=int, default=1, help='Number of ResNet Blocks for generators')
 parser.add_argument('--model_dim', type=float, default=128, help='model dimensions multiplier')
 parser.add_argument('--plus', action="store_true", default=False, help='train modified vae')
-parser.add_argument('--n_zelements', type=int, default=4, help='elements per gorup for z')
-parser.add_argument('--n_pelements', type=int, default=128, help='elements per gorup for projected')
+parser.add_argument('--n_zelements', type=int, default=2, help='elements per gorup for z')
+parser.add_argument('--n_pelements', type=int, default=4096, help='elements per gorup for projected')
 
 # loss fn
-parser.add_argument('--beta', type=float, default=1., help='Beta hyperparam for KLD Loss')
-parser.add_argument('--gamma', type=float, default=1., help='gamma hyperparam for Sparsity Loss')
+parser.add_argument('--beta', type=float, default=5., help='Beta hyperparam for KLD Loss')
+parser.add_argument('--gamma', type=float, default=1e6, help='gamma hyperparam for Sparsity Loss')
 parser.add_argument('--recon', type=str, default='bce', help='Reconstruction loss type [bce, l2]')
 
 # training hyperparams
@@ -39,7 +39,7 @@ parser.add_argument('--device_ids', type=list, default=[0, 1], help='List of GPU
 parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for generators')
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
 parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
-parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
+parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--data_parallel', action="store_true", default=False, help='train with data parallel')
 
 # logging
@@ -105,8 +105,7 @@ if __name__ == '__main__':
             if args.plus:
                 std = logvar.mul(0.5).exp_()
                 sparsity_loss = GroupSparsityLoss(args.n_zelements)(mu) + \
-                    GroupSparsityLoss(args.n_zelements)(std) + \
-                        GroupSparsityLoss(args.n_pelements)(z_p)
+                    GroupSparsityLoss(args.n_pelements)(z_p)
                 loss += args.gamma * sparsity_loss
                 s_loss.append(sparsity_loss.item())
 
