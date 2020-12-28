@@ -79,46 +79,47 @@ if __name__ == '__main__':
     score_history = deque([], maxlen=args.window_size)
     episodes = tqdm(range(args.n_episodes))
 
-    # for e in episodes:
-    #     # resetting
-    #     state = env.reset()
-    #     if args.img_input:
-    #         state_queue = deque(
-    #             [preprocess_img(state['pixels'], args.crop_dim) for _ in range(args.order)],
-    #             maxlen=args.order)
-    #         state = torch.cat(list(state_queue), 1).cpu().numpy()
-    #     done, score = False, 0
+    for e in episodes:
+        # resetting
+        state = env.reset()
+        if args.img_input:
+            state_queue = deque(
+                [preprocess_img(state['pixels'], args.crop_dim) for _ in range(args.order)],
+                maxlen=args.order)
+            state = torch.cat(list(state_queue), 1).cpu().numpy()
+        done, score = False, 0
 
-    #     while not done:
-    #         action = agent.choose_action(state)
-    #         state_, reward, done, _ = env.step(action)
-    #         if isinstance(reward, np.ndarray):
-    #             reward = reward[0]
-    #         if args.img_input:
-    #             state_queue.append(preprocess_img(state_['pixels'], args.crop_dim))
-    #             state_ = torch.cat(list(state_queue), 1).cpu().numpy()
-    #         agent.remember(state, action, reward, state_, done)
-    #         agent.learn()
+        while not done:
+            action = agent.choose_action(state)
+            state_, reward, done, _ = env.step(action)
+            if isinstance(reward, np.ndarray):
+                reward = reward[0]
+            if args.img_input:
+                state_queue.append(preprocess_img(state_['pixels'], args.crop_dim))
+                state_ = torch.cat(list(state_queue), 1).cpu().numpy()
+            agent.remember(state, action, reward, state_, done)
+            agent.learn()
 
-    #         # reset, log & render
-    #         score += reward
-    #         state = state_
-    #         episodes.set_postfix({'Reward': reward, 'Iteration': agent.time_step})
-    #         if args.no_render:
-    #             continue
-    #         env.render()
+            # reset, log & render
+            score += reward
+            state = state_
+            episodes.set_postfix({'Reward': reward, 'Iteration': agent.time_step})
+            if args.no_render:
+                continue
+            env.render()
 
-    #     # logging
-    #     score_history.append(score)
-    #     moving_avg = sum(score_history) / len(score_history)
-    #     agent.add_scalar('Average Score', moving_avg, global_step=e)
+        # logging
+        score_history.append(score)
+        moving_avg = sum(score_history) / len(score_history)
+        agent.add_scalar('Average Score', moving_avg, global_step=e)
+        agent.add_scalar('Episode Score', score, global_step=e)
 
-    #     # save weights @ best score
-    #     if moving_avg > best_score:
-    #         best_score = moving_avg
-    #         agent.save_networks()
+        # save weights @ best score
+        if moving_avg > best_score:
+            best_score = moving_avg
+            agent.save_networks()
 
-    #     tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
-    #             Episode Score: {score}, \
-    #             Average Score: {moving_avg}, \
-    #             Best Score: {best_score}')
+        tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
+                Episode Score: {score}, \
+                Average Score: {moving_avg}, \
+                Best Score: {best_score}')

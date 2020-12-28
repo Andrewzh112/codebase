@@ -16,7 +16,7 @@ class Agent:
                  img_input, in_channels, order, depth, multiplier,
                  action_embed_dim, hidden_dim, crop_dim):
         if img_input:
-            input_dim = [in_channels*order, crop_dim, crop_dim]
+            input_dim = [in_channels * order, crop_dim, crop_dim]
         else:
             input_dim = env.observation_space.shape
             state_space = input_dim[0]
@@ -49,16 +49,14 @@ class Agent:
 
         # networks & optimizers
         if img_input:
-            self.actor = ImageActor(in_channels, n_actions, hidden_dim, self.max_action, order, depth, multiplier, 'actor').to(self.device)
-            self.critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'critic_1').to(self.device)
-            self.critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'critic_2').to(self.device)
+            self.actor = ImageActor(in_channels, n_actions, hidden_dim, self.max_action, order, depth, multiplier, crop_dim, 'actor').to(self.device)
+            self.critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'critic_1').to(self.device)
+            self.critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'critic_2').to(self.device)
 
-            self.target_actor = ImageActor(in_channels, n_actions, hidden_dim, self.max_action, order, depth, multiplier, 'target_actor').to(self.device)
-            self.target_critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'target_critic_1').to(self.device)
-            self.target_critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, 'target_critic_2').to(self.device)
-            print('actor')
-            print(self.actor)
-            
+            self.target_actor = ImageActor(in_channels, n_actions, hidden_dim, self.max_action, order, depth, multiplier, crop_dim, 'target_actor').to(self.device)
+            self.target_critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'target_critic_1').to(self.device)
+            self.target_critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'target_critic_2').to(self.device)
+
         # physics networks
         else:
             self.actor = Actor(state_space, hidden_dims, n_actions, self.max_action, 'actor').to(self.device)
