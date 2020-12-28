@@ -3,15 +3,15 @@ import torch
 
 
 class VAELoss(nn.Module):
-    def __init__(self, recon_type, beta):
+    def __init__(self, recon_type, beta, reduction='sum'):
         super().__init__()
         self.recon_type = recon_type
         if recon_type == 'l2':
-            self.recon = nn.MSELoss(reduction='sum')
+            self.recon = nn.MSELoss(reduction=reduction)
         elif recon_type == 'l1':
-            self.recon = nn.L1Loss(reduction='sum')
+            self.recon = nn.L1Loss(reduction=reduction)
         elif recon_type == 'bce':
-            self.recon = nn.BCELoss(reduction='sum')
+            self.recon = nn.BCELoss(reduction=reduction)
         else:
             raise NotImplementedError
         self.beta = beta
@@ -29,15 +29,16 @@ class VAELoss(nn.Module):
 
 
 class GroupSparsityLoss(nn.Module):
-    def __init__(self, n_elements):
+    def __init__(self, n_elements, rho=0.05):
         super().__init__()
         self.n_elements = n_elements
+        self.rho = torch.tensor(rho)
 
     def forward(self, z):
+        rho, n_elements = self.rho, self.n_elements
         # flatten latent variables & get dims
         z = z.view(z.size(0), -1)
         batch_size, z_dim = z.size()
-        n_elements = self.n_elements
         assert z_dim % n_elements == 0
         groups = z_dim // n_elements
 
@@ -47,4 +48,9 @@ class GroupSparsityLoss(nn.Module):
         ).unsqueeze(0).repeat(batch_size, 1, 1).to(z.device)
         z_groups = z.unsqueeze(1).repeat(1, groups, 1)
         masked_z = z_groups * mask
-        return masked_z.norm(p=2, dim=-1).sum(-1).mean()
+        rho_hat = masked_z.norm(p=2, dim=-1)
+
+        sparsity_penalty = (
+            (rho * (torch.log(rho) - torch.log(rho_hat))) + (
+                    (1 - rho) * (torch.log(1 - rho) - torch.log(1 - rho_hat)))).sum(-1)
+        return sparsity_penalty.mean()

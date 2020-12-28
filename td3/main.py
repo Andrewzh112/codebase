@@ -29,20 +29,20 @@ parser.add_argument('--virtual_display', action="store_false", default=True, hel
 parser.add_argument('--img_input', action="store_true", default=False, help='Use image as states')
 parser.add_argument('--in_channels', type=int, default=3, help='Number of image channels for image input')
 parser.add_argument('--depth', type=int, default=3, help='Depth for CNN architecture for image input')
-parser.add_argument('--multiplier', type=int, default=32, help='Channel multiplier for CNN architecture for image input')
+parser.add_argument('--multiplier', type=int, default=16, help='Channel multiplier for CNN architecture for image input')
 parser.add_argument('--order', type=int, default=3, help='Store past (order) of frames for image input')
-parser.add_argument('--action_embed_dim', type=int, default=32, help='Embedding dimension for actions for image input')
-parser.add_argument('--hidden_dim', type=int, default=512, help='List of hidden dims for embedding networks')
+parser.add_argument('--action_embed_dim', type=int, default=256, help='Embedding dimension for actions for image input')
+parser.add_argument('--hidden_dim', type=int, default=256, help='Hidden dims for embedding networks')
 parser.add_argument('--crop_dim', type=int, default=32, help='Crop dim for image inputs')
 
 # training hp params
 parser.add_argument('--n_episodes', type=int, default=1000, help='Number of episodes')
 parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
-parser.add_argument('--alpha', type=float, default=0.001, help='Learning rate actor')
-parser.add_argument('--beta', type=float, default=0.001, help='Learning rate critic')
+parser.add_argument('--alpha', type=float, default=3e-4, help='Learning rate actor')
+parser.add_argument('--beta', type=float, default=3e-4, help='Learning rate critic')
 parser.add_argument('--warmup', type=int, default=1000, help='Number of warmup steps')
 parser.add_argument('--d', type=int, default=2, help='Skip iteration')
-parser.add_argument('--max_size', type=int, default=1000000, help='Replay buffer size')
+parser.add_argument('--max_size', type=int, default=100000, help='Replay buffer size')
 parser.add_argument('--no_render', action="store_true", default=False, help='Whether to render')
 parser.add_argument('--window_size', type=int, default=100, help='Score tracking moving average window size')
 
@@ -58,6 +58,7 @@ if __name__ == '__main__':
         import pyvirtualdisplay
         _display = pyvirtualdisplay.Display(visible=False, size=(1400, 900))
         _ = _display.start()
+
     # paths
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
@@ -78,46 +79,46 @@ if __name__ == '__main__':
     score_history = deque([], maxlen=args.window_size)
     episodes = tqdm(range(args.n_episodes))
 
-    for e in episodes:
-        # resetting
-        state = env.reset()
-        if args.img_input:
-            state_queue = deque(
-                [preprocess_img(state['pixels'], args.crop_dim) for _ in range(args.order)],
-                maxlen=args.order)
-            state = torch.cat(list(state_queue), 1).cpu().numpy()
-        done, score = False, 0
+    # for e in episodes:
+    #     # resetting
+    #     state = env.reset()
+    #     if args.img_input:
+    #         state_queue = deque(
+    #             [preprocess_img(state['pixels'], args.crop_dim) for _ in range(args.order)],
+    #             maxlen=args.order)
+    #         state = torch.cat(list(state_queue), 1).cpu().numpy()
+    #     done, score = False, 0
 
-        while not done:
-            action = agent.choose_action(state)
-            state_, reward, done, _ = env.step(action)
-            if isinstance(reward, np.ndarray):
-                reward = reward[0]
-            if args.img_input:
-                state_queue.append(preprocess_img(state_['pixels'], args.crop_dim))
-                state_ = torch.cat(list(state_queue), 1).cpu().numpy()
-            agent.remember(state, action, reward, state_, done)
-            agent.learn()
+    #     while not done:
+    #         action = agent.choose_action(state)
+    #         state_, reward, done, _ = env.step(action)
+    #         if isinstance(reward, np.ndarray):
+    #             reward = reward[0]
+    #         if args.img_input:
+    #             state_queue.append(preprocess_img(state_['pixels'], args.crop_dim))
+    #             state_ = torch.cat(list(state_queue), 1).cpu().numpy()
+    #         agent.remember(state, action, reward, state_, done)
+    #         agent.learn()
 
-            # reset, log & render
-            score += reward
-            state = state_
-            episodes.set_postfix({'Reward': reward})
-            if args.no_render:
-                continue
-            env.render()
+    #         # reset, log & render
+    #         score += reward
+    #         state = state_
+    #         episodes.set_postfix({'Reward': reward, 'Iteration': agent.time_step})
+    #         if args.no_render:
+    #             continue
+    #         env.render()
 
-        # logging
-        score_history.append(score)
-        moving_avg = sum(score_history) / len(score_history)
-        agent.add_scalar('Average Score', moving_avg, global_step=e)
+    #     # logging
+    #     score_history.append(score)
+    #     moving_avg = sum(score_history) / len(score_history)
+    #     agent.add_scalar('Average Score', moving_avg, global_step=e)
 
-        # save weights @ best score
-        if moving_avg > best_score:
-            best_score = moving_avg
-            agent.save_networks()
+    #     # save weights @ best score
+    #     if moving_avg > best_score:
+    #         best_score = moving_avg
+    #         agent.save_networks()
 
-        tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
-                Episode Score: {score}, \
-                Average Score: {moving_avg}, \
-                Best Score: {best_score}')
+    #     tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
+    #             Episode Score: {score}, \
+    #             Average Score: {moving_avg}, \
+    #             Best Score: {best_score}')

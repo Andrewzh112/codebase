@@ -59,12 +59,14 @@ class VAE_Plus(VAE):
     def __init__(self, z_dim, model_dim, img_size, img_channels):
         super().__init__(z_dim, model_dim, img_size, img_channels)
         self.encoder = nn.Sequential(
-            ConvNormAct(img_channels, model_dim, 'sn', 'down', activation='lrelu'),
+            ConvNormAct(img_channels, model_dim, 'sn', 'down', activation='relu'),
             SA_Conv2d(model_dim),
-            ConvNormAct(model_dim, model_dim * 2, 'sn', 'down', activation='lrelu'),
-            ConvNormAct(model_dim * 2, model_dim * 4, 'sn', 'down', activation='lrelu'),
-            ConvNormAct(model_dim * 4, model_dim * 8, 'sn', None, activation='lrelu'),
-            ConvNormAct(model_dim * 8, model_dim * 8, 'sn', None, activation='lrelu'),
+            nn.BatchNorm2d(model_dim),
+            nn.ReLU(),
+            ConvNormAct(model_dim, model_dim * 2, 'sn', 'down', activation='relu'),
+            ConvNormAct(model_dim * 2, model_dim * 4, 'sn', 'down', activation='relu'),
+            ConvNormAct(model_dim * 4, model_dim * 8, 'sn', None, activation='relu'),
+            ConvNormAct(model_dim * 8, model_dim * 8, 'sn', None, activation='relu'),
             nn.Flatten(),
             nn.Linear((img_size // (2**3))**2 * model_dim * 8, z_dim * 2)
         )
@@ -74,11 +76,13 @@ class VAE_Plus(VAE):
             nn.LeakyReLU(0.2)
         )
         self.decoder = nn.Sequential(
-            ConvNormAct(model_dim * 8, model_dim * 8, 'sn', None, activation='lrelu'),
-            ConvNormAct(model_dim * 8, model_dim * 4, 'sn', None, activation='lrelu'),
-            ConvNormAct(model_dim * 4, model_dim * 2, 'sn', 'up', activation='lrelu'),
-            ConvNormAct(model_dim * 2, model_dim, 'sn', 'up', activation='lrelu'),
+            ConvNormAct(model_dim * 8, model_dim * 8, 'sn', None, activation='relu'),
+            ConvNormAct(model_dim * 8, model_dim * 4, 'sn', None, activation='relu'),
+            ConvNormAct(model_dim * 4, model_dim * 2, 'sn', 'up', activation='relu'),
+            ConvNormAct(model_dim * 2, model_dim, 'sn', 'up', activation='relu'),
             SA_Conv2d(model_dim),
+            nn.BatchNorm2d(model_dim),
+            nn.ReLU(),
             SN_ConvTranspose2d(in_channels=model_dim, out_channels=img_channels, kernel_size=4, stride=2, padding=1),
             nn.Tanh()
         )

@@ -12,6 +12,8 @@ class Discriminator(nn.Module):
         self.disc = nn.Sequential(
             ConvNormAct(img_channels, h_dim, 'sn', 'down', activation='lrelu', normalization='bn'),
             SA_Conv2d(h_dim),
+            nn.BatchNorm2d(h_dim),
+            nn.LeakyReLU(0.2),
             ConvNormAct(h_dim, h_dim*2, 'sn', 'down', activation='lrelu', normalization='bn'),
             ConvNormAct(h_dim*2, h_dim*4, 'sn', 'down', activation='lrelu', normalization='bn'),
             ConvNormAct(h_dim*4, h_dim*8, 'sn', 'down', activation='lrelu', normalization='bn'),
@@ -46,6 +48,8 @@ class Generator(nn.Module):
             ConditionalConvBNAct(h_dim*4, h_dim*2, 'sn', 'up', activation='relu', normalization='bn', num_classes=num_classes),
             ConditionalConvBNAct(h_dim*2, h_dim, 'sn', 'up', activation='relu', normalization='bn', num_classes=num_classes),
             SA_Conv2d(h_dim),
+            ConditionalNorm(num_classes, h_dim) if num_classes > 0 else nn.BatchNorm2d(h_dim),
+            nn.ReLU(),
             SN_ConvTranspose2d(in_channels=h_dim, out_channels=img_channels, kernel_size=4,
                                stride=2, padding=1),
             nn.Tanh()
@@ -61,7 +65,7 @@ class Generator(nn.Module):
             self.min_hw,
             self.min_hw)
         for layer in self.gen:
-            if isinstance(layer, ConditionalConvBNAct) and y is not None:
+            if isinstance(layer, (ConditionalNorm, ConditionalConvBNAct)) and y is not None:
                 x_hat = layer(x_hat, y)
             else:
                 x_hat = layer(x_hat)

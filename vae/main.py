@@ -30,15 +30,16 @@ parser.add_argument('--n_zelements', type=int, default=2, help='elements per gor
 parser.add_argument('--n_pelements', type=int, default=4096, help='elements per gorup for projected')
 
 # loss fn
-parser.add_argument('--beta', type=float, default=5., help='Beta hyperparam for KLD Loss')
-parser.add_argument('--gamma', type=float, default=1e6, help='gamma hyperparam for Sparsity Loss')
+parser.add_argument('--beta', type=float, default=0.1, help='Beta hyperparam for KLD Loss')
+parser.add_argument('--gamma', type=float, default=1e-4, help='gamma hyperparam for Sparsity Loss')
 parser.add_argument('--recon', type=str, default='bce', help='Reconstruction loss type [bce, l2]')
+parser.add_argument('--reduction', type=str, default='mean', help='Loss reduction method [mean, sum]')
 
 # training hyperparams
 parser.add_argument('--device_ids', type=list, default=[0, 1], help='List of GPU devices')
 parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for generators')
 parser.add_argument('--betas', type=tuple, default=(0.5, 0.999), help='Betas for Adam optimizer')
-parser.add_argument('--n_epochs', type=int, default=200, help='Number of epochs')
+parser.add_argument('--n_epochs', type=int, default=50, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--data_parallel', action="store_true", default=False, help='train with data parallel')
 
@@ -78,7 +79,7 @@ if __name__ == '__main__':
     model.apply(initialize_modules)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=args.betas)
     scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer, lambda epoch: 0.995)
-    criterion = VAELoss(args.recon, args.beta)
+    criterion = VAELoss(args.recon, args.beta, args.reduction)
 
     # fixed z to see how model changes on the same latent vectors
     fixed_z = torch.randn(args.sample_size, args.z_dim).to(device)
@@ -103,11 +104,9 @@ if __name__ == '__main__':
 
             # if there is sparsity loss
             if args.plus:
-                std = logvar.mul(0.5).exp_()
-                sparsity_loss = GroupSparsityLoss(args.n_zelements)(mu) + \
-                    GroupSparsityLoss(args.n_pelements)(z_p)
-                loss += args.gamma * sparsity_loss
-                s_loss.append(args.gamma * sparsity_loss.item())
+                sparsity_loss = args.gamma * GroupSparsityLoss(args.n_zelements)(mu)
+                loss +=  sparsity_loss
+                s_loss.append(sparsity_loss.item())
 
             # logging and updating parameters
             losses.append(loss.item())

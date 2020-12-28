@@ -46,7 +46,7 @@ class Actor(nn.Module):
 
 
 class ImageActor(nn.Module):
-    def __init__(self, in_channels, n_actions, max_action, order, depth, multiplier, name):
+    def __init__(self, in_channels, n_actions, hidden_dim, max_action, order, depth, multiplier, name):
         super().__init__()
         self.name = name
         self.max_action = max_action
@@ -65,10 +65,13 @@ class ImageActor(nn.Module):
             *convs,
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten())
-        self.fc = nn.Linear(order*ch, n_actions)
+        self.fc = nn.Sequential(
+            nn.Linear(order * ch, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, n_actions))
 
     def forward(self, imgs):
-        img_feature = [self.convs(imgs[:, i*self.order:(i+1)*self.order, :, :]) for i in range(self.order)]
+        img_feature = [self.convs(img) for img in imgs.chunk(self.order, 1)]
         img_feature = torch.cat(img_feature, 1)
         return torch.tanh(self.fc(img_feature)) * self.max_action
 
@@ -104,9 +107,9 @@ class ImageCritic(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-    def forward(self, state, action):
-        img_embedding = [self.avg_pool(self.convs(
-            state[:, i*self.order:(i+1)*self.order, :, :])).squeeze() for i in range(self.order)]
+    def forward(self, states, action):
+        img_embedding = [self.avg_pool(
+            self.convs(state)).squeeze() for state in states.chunk(self.order, 1)]
         img_embedding = torch.cat(img_embedding, 1)
         action_embedding = self.action_head(action)
         combined_embedding = torch.cat([img_embedding, action_embedding], dim=1)
