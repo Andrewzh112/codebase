@@ -78,11 +78,12 @@ class ImageActor(nn.Module):
 
 
 class ImageCritic(nn.Module):
-    def __init__(self, in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, img_size, name):
+    def __init__(self, in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, img_size, img_feature_dim, name):
         super().__init__()
         self.name = name
         self.order = order
-        self.min_hw = img_size // (2 ** depth)
+        self.img_feature_dim = img_feature_dim
+        min_hw = img_size // (2 ** depth)
 
         # constructed simple cnn
         convs = []
@@ -96,7 +97,13 @@ class ImageCritic(nn.Module):
                 prev_ch = ch
                 ch *= 2
         self.ch = ch
-        self.convs = nn.Sequential(*convs)
+        self.img_feature_extractor = nn.Sequential(
+            *convs,
+            nn.Flatten())
+        self.image_head = nn.Sequential(
+            nn.Linear(ch * order * min_hw ** 2, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, img_feature_dim))
 
         # embed actions, concat w/ img and output critic
         self.action_head = nn.Sequential(
@@ -105,16 +112,15 @@ class ImageCritic(nn.Module):
             nn.Linear(hidden_dim, action_embed_dim)
         )
         self.combined_critic_head = nn.Sequential(
-            nn.Linear(ch * order * self.min_hw ** 2 + action_embed_dim, hidden_dim),
+            nn.Linear(img_feature_dim + action_embed_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         )
 
     def forward(self, states, action):
-        batch_size = states.size(0)
-        img_embedding = [self.convs(state).view(
-            batch_size, self.ch * self.min_hw * self.min_hw) for state in states.chunk(self.order, 1)]
+        img_embedding = [self.img_feature_extractor(state) for state in states.chunk(self.order, 1)]
         img_embedding = torch.cat(img_embedding, 1)
+        img_embedding = self.image_head(img_embedding)
         action_embedding = self.action_head(action)
         combined_embedding = torch.cat([img_embedding, action_embedding], dim=1)
         return self.combined_critic_head(combined_embedding)

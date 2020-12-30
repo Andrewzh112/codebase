@@ -33,11 +33,12 @@ parser.add_argument('--multiplier', type=int, default=16, help='Channel multipli
 parser.add_argument('--order', type=int, default=3, help='Store past (order) of frames for image input')
 parser.add_argument('--action_embed_dim', type=int, default=256, help='Embedding dimension for actions for image input')
 parser.add_argument('--hidden_dim', type=int, default=256, help='Hidden dims for embedding networks')
+parser.add_argument('--img_feature_dim', type=int, default=64, help='Feature dim for images')
 parser.add_argument('--crop_dim', type=int, default=32, help='Crop dim for image inputs')
 
 # training hp params
 parser.add_argument('--n_episodes', type=int, default=1000, help='Number of episodes')
-parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
+parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--alpha', type=float, default=3e-4, help='Learning rate actor')
 parser.add_argument('--beta', type=float, default=3e-4, help='Learning rate critic')
 parser.add_argument('--warmup', type=int, default=1000, help='Number of warmup steps')
@@ -45,6 +46,7 @@ parser.add_argument('--d', type=int, default=2, help='Skip iteration')
 parser.add_argument('--max_size', type=int, default=100000, help='Replay buffer size')
 parser.add_argument('--no_render', action="store_true", default=False, help='Whether to render')
 parser.add_argument('--window_size', type=int, default=100, help='Score tracking moving average window size')
+parser.add_argument('--continue_train', action="store_true", default=False, help='Continue Training')
 
 # misc
 parser.add_argument('--one_device', action="store_false", default=True, help='Whether to only train on device 0')
@@ -69,15 +71,19 @@ if __name__ == '__main__':
     if args.img_input:
         env.reset()
         env = PixelObservationWrapper(env)
+    max_action = float(env.action_space.high[0])
     agent = Agent(env, args.alpha, args.beta, args.hidden_dims, args.tau, args.batch_size,
-                  args.gamma, args.d, args.warmup, args.max_size, args.c, args.sigma,
-                  args.one_device, args.log_dir, args.checkpoint_dir, args.img_input,
-                  args.in_channels, args.order, args.depth, args.multiplier,
-                  args.action_embed_dim, args.hidden_dim, args.crop_dim)
+                  args.gamma, args.d, args.warmup, args.max_size, args.c * max_action,
+                  args.sigma * max_action, args.one_device, args.log_dir, args.checkpoint_dir,
+                  args.img_input, args.in_channels, args.order, args.depth, args.multiplier,
+                  args.action_embed_dim, args.hidden_dim, args.crop_dim, args.img_feature_dim)
 
     best_score = env.reward_range[0]
     score_history = deque([], maxlen=args.window_size)
     episodes = tqdm(range(args.n_episodes))
+
+    if args.continue_train:
+        agent.load_state_dicts()
 
     for e in episodes:
         # resetting
@@ -115,11 +121,11 @@ if __name__ == '__main__':
         agent.add_scalar('Episode Score', score, global_step=e)
 
         # save weights @ best score
-        if moving_avg > best_score:
-            best_score = moving_avg
+        if score > best_score:
+            best_score = score
             agent.save_networks()
 
         tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
-                Episode Score: {score}, \
-                Average Score: {moving_avg}, \
-                Best Score: {best_score}')
+                    Episode Score: {score}, \
+                    Average Score: {moving_avg}, \
+                    Best Score: {best_score}')

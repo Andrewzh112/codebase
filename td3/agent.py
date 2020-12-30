@@ -14,7 +14,7 @@ class Agent:
                  batch_size, gamma, d, warmup, max_size, c,
                  sigma, one_device, log_dir, checkpoint_dir,
                  img_input, in_channels, order, depth, multiplier,
-                 action_embed_dim, hidden_dim, crop_dim):
+                 action_embed_dim, hidden_dim, crop_dim, img_feature_dim):
         if img_input:
             input_dim = [in_channels * order, crop_dim, crop_dim]
         else:
@@ -37,6 +37,7 @@ class Agent:
         self.c = c
         self.sigma = sigma
         self.img_input = img_input
+        self.env = env
 
         # training device
         if one_device:
@@ -50,12 +51,12 @@ class Agent:
         # networks & optimizers
         if img_input:
             self.actor = ImageActor(in_channels, n_actions, hidden_dim, self.max_action, order, depth, multiplier, crop_dim, 'actor').to(self.device)
-            self.critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'critic_1').to(self.device)
-            self.critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'critic_2').to(self.device)
+            self.critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, img_feature_dim, 'critic_1').to(self.device)
+            self.critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, img_feature_dim, 'critic_2').to(self.device)
 
             self.target_actor = ImageActor(in_channels, n_actions, hidden_dim, self.max_action, order, depth, multiplier, crop_dim, 'target_actor').to(self.device)
-            self.target_critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'target_critic_1').to(self.device)
-            self.target_critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, 'target_critic_2').to(self.device)
+            self.target_critic_1 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, img_feature_dim, 'target_critic_1').to(self.device)
+            self.target_critic_2 = ImageCritic(in_channels, n_actions, hidden_dim, action_embed_dim, order, depth, multiplier, crop_dim, img_feature_dim, 'target_critic_2').to(self.device)
 
         # physics networks
         else:
@@ -83,46 +84,46 @@ class Agent:
     def _clamp_action_bound(self, action):
         return action.clamp(self.min_action, self.max_action)
 
-    def choose_action(self, observation, rendering=False):
-        if self.time_step < self.warmup or not rendering:
-            mu = self._get_noise(clip=False)
+    def choose_action(self, observation):
+        if self.time_step < self.warmup:
+            mu = self.env.action_space.sample()
         else:
             state = torch.tensor(observation, dtype=torch.float).to(self.device)
             mu = self.actor(state) + self._get_noise(clip=False)
+            mu = self._clamp_action_bound(mu).cpu().detach().numpy()
         self.time_step += 1
-        return self._clamp_action_bound(mu).cpu().detach().numpy()
+        return mu
 
     def remember(self, state, action, reward, state_, done):
         self.buffer.store_transition(state, action, reward, state_, done)
 
     def critic_step(self, state, action, reward, state_, done):
-        # get target actions w/ noise
-        target_actions = self.target_actor(state_) + self._get_noise()
-        target_actions = self._clamp_action_bound(target_actions)
+        with torch.no_grad():
+            # get target actions w/ noise
+            target_actions = self.target_actor(state_) + self._get_noise()
+            target_actions = self._clamp_action_bound(target_actions)
 
-        # target & online values
-        q1_ = self.target_critic_1(state_, target_actions)
-        q2_ = self.target_critic_2(state_, target_actions)
+            # target & online values
+            q1_ = self.target_critic_1(state_, target_actions)
+            q2_ = self.target_critic_2(state_, target_actions)
 
-        # done mask
-        q1_[done], q2_[done] = 0.0, 0.0
+            # done mask
+            q1_[done], q2_[done] = 0.0, 0.0
+
+            q1_ = q1_.view(-1)
+            q2_ = q2_.view(-1)        
+
+            critic_value_ = torch.min(q1_, q2_)
+
+            target = reward + self.gamma * critic_value_
+            target = target.unsqueeze(1)
 
         q1 = self.critic_1(state, action)
         q2 = self.critic_2(state, action)
 
-        q1_ = q1_.view(-1)
-        q2_ = q2_.view(-1)        
-
-        critic_value_ = torch.min(q1_, q2_)
-
-        target = reward + self.gamma * critic_value_
-        target = target.unsqueeze(1)
+        critic_loss = F.mse_loss(q1, target) + F.mse_loss(q2, target)
 
         self.critic_optimizer.zero_grad()
-
-        q1_loss = F.mse_loss(target, q1)
-        q2_loss = F.mse_loss(target, q2)
-        critic_loss = q1_loss + q2_loss
         critic_loss.backward()
         self.critic_optimizer.step()
 
@@ -130,8 +131,8 @@ class Agent:
 
     def actor_step(self, state):
         # calculate loss, update actor params
-        self.actor_optimizer.zero_grad()
         actor_loss = -torch.mean(self.critic_1(state, self.actor(state)))
+        self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
@@ -160,7 +161,7 @@ class Agent:
 
     def momentum_update(self, online_network, target_network, tau):
         for param_o, param_t in zip(online_network.parameters(), target_network.parameters()):
-            param_t.data = param_t.data * tau + param_o.data * (1. - tau)
+            param_t.data.copy_(tau * param_o.data + (1. - tau) * param_t.data)
 
     def update_network_parameters(self, tau=None):
         if tau is None:

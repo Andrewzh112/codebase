@@ -23,10 +23,11 @@ if __name__ == '__main__':
         env = PixelObservationWrapper(env)
 
     agent = Agent(env, args.alpha, args.beta, args.hidden_dims, args.tau, args.batch_size,
-                  args.gamma, args.d, args.warmup, args.max_size, args.c, args.sigma,
-                  args.one_device, args.log_dir, args.checkpoint_dir, args.img_input,
-                  args.in_channels, args.order, args.depth, args.multiplier,
-                  args.action_embed_dim, args.hidden_dim, args.crop_dim)
+                  args.gamma, args.d, 0, args.max_size, args.c * max_action,
+                  args.sigma * max_action, args.one_device, args.log_dir, args.checkpoint_dir,
+                  args.img_input, args.in_channels, args.order, args.depth, args.multiplier,
+                  args.action_embed_dim, args.hidden_dim, args.crop_dim, args.img_feature_dim)
+
     best_score = env.reward_range[0]
     load_weights(args.checkpoint_dir,
                  [agent.actor] , ['actor'])
@@ -43,8 +44,8 @@ if __name__ == '__main__':
         done, score = False, 0
 
         while not done:
-            action = agent.choose_action(state, rendering=True)
-            state_, reward, _, _ = env.step(action)
+            action = agent.choose_action(state)
+            state_, reward, done, _ = env.step(action)
             if isinstance(reward, np.ndarray):
                 reward = reward[0]
             if args.img_input:
@@ -58,5 +59,5 @@ if __name__ == '__main__':
         if score > best_score:
             best_score = score
         tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, \
-                    Episode Score: {score}, \
-                    Best Score: {best_score}')
+                     Episode Score: {score}, \
+                     Best Score: {best_score}')
