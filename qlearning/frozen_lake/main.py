@@ -3,18 +3,20 @@ import gym
 import numpy as np
 import argparse
 from collections import deque
-from qlearning.frozen_lake.agent import Tabular_Agent
+import torch
+from tqdm import tqdm
+from qlearning.agents import TabularAgent, NaiveNeuralAgent
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--policy', type=str, default='Q', help='The type of policy you wish to use')
+parser.add_argument('--policy', type=str, default='naive neural', help='The type of policy you wish to use')
 parser.add_argument('--trailing_n', type=int, default=10, help='Window size of plotting win %')
-parser.add_argument('--n_episodes', type=int, default=500000, help='Number of episodes agent interacts with env')
+parser.add_argument('--n_episodes', type=int, default=10000, help='Number of episodes agent interacts with env')
 parser.add_argument('--alpha', type=float, default=0.001, help='Learning rate')
-parser.add_argument('--gamma', type=float, default=0.9, help='Discount factor')
+parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
 parser.add_argument('--epsilon_init', type=float, default=1.0, help='Initial epsilon value')
 parser.add_argument('--epsilon_min', type=float, default=0.01, help='Minimum epsilon value to decay to')
-parser.add_argument('--epsilon_desc', type=float, default=0.9999995, help='Epsilon multiplier')
+parser.add_argument('--epsilon_desc', type=float, default=0.000396, help='Epsilon decrease')
 parser.add_argument('--progress_window', type=int, default=100, help='Window of episodes for progress')
 parser.add_argument('--print_every', type=int, default=1000, help='Print progress interval')
 args = parser.parse_args()
@@ -29,18 +31,24 @@ class Policies:
     """
     def __init__(self, policy):
         self.policy = policy
-        if policy == 'Q':
-            self.agent = Tabular_Agent(np.arange(env.observation_space.n),
+        if policy == 'tabular':
+            self.agent = TabularAgent(np.arange(env.observation_space.n),
                                        np.arange(env.action_space.n),
                                        args.epsilon_init, args.epsilon_min, args.epsilon_desc,
                                        args.gamma, args.alpha, args.n_episodes)
+        elif policy == 'naive neural':
+            self.agent = NaiveNeuralAgent(np.arange(env.observation_space.n),
+                                       np.arange(env.action_space.n),
+                                       args.epsilon_init, args.epsilon_min, args.epsilon_desc,
+                                       args.gamma, args.alpha, args.n_episodes,
+                                       policy=policy, state_dim=64, action_dim=64, hidden_dim=128)
 
     def __call__(self, state):
         if self.policy == 'random':
             return env.action_space.sample()
         if self.policy == 'direct':
             return self._direct_policy(state)
-        if self.policy == 'Q':
+        if self.policy in ['tabular', 'naive neural']:
             return self._epsilon_greedy(state)
 
     def _direct_policy(self, state):
@@ -52,7 +60,7 @@ class Policies:
             return 0
 
     def _epsilon_greedy(self, state):
-        return self.agent.strategize(state)
+        return self.agent.epsilon_greedy(state)
 
     def update(self, state, action, reward, next_state):
         self.agent.update(state, action, reward, next_state)
@@ -80,23 +88,34 @@ if __name__ == '__main__':
     env = gym.make('FrozenLake-v0')
     scores, avg_scores = [], []
     pi = Policies(args.policy)
-    for i in range(args.n_episodes):
+    if args.policy == 'naive neural':
+        device = pi.agent.device
+    pbar = tqdm(range(args.n_episodes))
+    for i in pbar:
         done, observation, score = False, env.reset(), 0
         while not done:
+            if args.policy == 'naive neural':
+                observation = torch.tensor([observation]).to(device)
             action = pi(observation)
             next_observation, reward, done, info = env.step(action)
-            if args.policy == 'Q':
+            if args.policy == 'naive neural':
+                action, next_observation = (
+                    torch.tensor([action]).to(device),
+                    torch.tensor([next_observation]).to(device))
+            if args.policy in ['tabular', 'naive neural']:
                 pi.update(observation, action, reward, next_observation)
             score += reward
             observation = next_observation
+        if args.policy == 'naive neural':
+            pi.agent.decrease_epsilon()
         scores.append(score)
         avg_scores.append(np.mean(scores[-100:]))
-        if (i + 1) % args.print_every == 0 and args.policy == 'Q':
-            print(f'Episode: {i + 1}/{args.n_episodes}, Average Score: {avg_scores[-1]}, Epsilon {pi.agent.epsilon}')
+        if (i + 1) % args.print_every == 0 and args.policy in ['tabular', 'naive neural']:
+            tqdm.write(f'Episode: {i + 1}/{args.n_episodes}, Average Score: {avg_scores[-1]}, Epsilon: {pi.agent.epsilon}')
     env.close()
 
     # plotting
-    if args.policy == 'Q':
+    if args.policy in ['tabular', 'naive neural']:
         plot_avg_score(avg_scores)
     else:
         plot_win_perc(scores, args.trailing_n, args.n_episodes)
