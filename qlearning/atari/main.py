@@ -12,7 +12,7 @@ from qlearning.atari.utils import processed_atari
 
 
 parser = argparse.ArgumentParser(description='Q Learning Atari Agents')
-parser.add_argument('--algorithm', type=str, default='DQN', help='The type of algorithm you wish to use.\nDQN\n \
+parser.add_argument('--algorithm', type=str, default='DuelingDDQN', help='The type of algorithm you wish to use.\nDQN\n \
                                                                                 DDQN\n \
                                                                                 DuelingDQN\n \
                                                                                 DuelingDDQN')
@@ -33,14 +33,17 @@ parser.add_argument('--target_update_interval', type=int, default=1000, help='In
 
 # training
 parser.add_argument('-e', '--n_episodes', '--epochs', type=int, default=1000, help='Number of episodes agent interacts with env')
-parser.add_argument('--alpha', type=float, default=0.0001, help='Learning rate')
+parser.add_argument('--lr', type=float, default=0.00025, help='Learning rate')
 parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
-parser.add_argument('--prioritize', action="store_false", default=True, help='Use Prioritized Experience Replay')
 parser.add_argument('--epsilon_init', type=float, default=1.0, help='Initial epsilon value')
 parser.add_argument('--epsilon_min', type=float, default=0.1, help='Minimum epsilon value to decay to')
 parser.add_argument('--epsilon_desc', type=float, default=1e-5, help='Epsilon decrease')
 parser.add_argument('--grad_clip', type=float, default=10, help='Norm of the grad clip, None for no clip')
 parser.add_argument('-b', '--batch_size', type=int, default=32, help='Batch size')
+parser.add_argument('--no_prioritize', action="store_true", default=False, help='Use Prioritized Experience Replay')
+parser.add_argument('--alpha', type=float, default=0.6, help='Prioritized Experience Replay alpha')
+parser.add_argument('--beta', type=float, default=0.4, help='Prioritized Experience Replay beta')
+parser.add_argument('--eps', type=float, default=1e-5, help='Prioritized Experience Replay epsilon')
 
 # logging
 parser.add_argument('--progress_window', type=int, default=100, help='Window of episodes for progress')
@@ -72,7 +75,7 @@ if __name__ == '__main__':
         agent = DQNAgent(env.observation_space.shape,
                          env.action_space.n,
                          args.epsilon_init, args.epsilon_min, args.epsilon_desc,
-                         args.gamma, args.alpha, args.n_episodes,
+                         args.gamma, args.lr, args.n_episodes,
                          input_channels=args.input_channels,
                          algorithm=args.algorithm,
                          img_size=args.img_size,
@@ -82,10 +85,18 @@ if __name__ == '__main__':
                          batch_size=args.batch_size,
                          cpt_dir=args.cpt_dir,
                          grad_clip=args.grad_clip,
-                         prioritize=args.prioritize,
+                         prioritize=not args.no_prioritize,
+                         alpha=args.alpha,
+                         beta=args.beta,
+                         eps=args.eps,
                          env_name=args.env_name)
     else:
         raise NotImplementedError
+    # force some parameters depending on if using priority replay
+    if args.no_prioritize:
+        args.alpha, args.beta, args.epsilon = 1, 0, 0
+    else:
+        args.lr /= 4
     scores, best_score = deque(maxlen=args.progress_window), -np.inf
 
     # load weights & make sure model in eval mode during test

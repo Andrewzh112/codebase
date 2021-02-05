@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--policy', type=str, default='naive neural', help='The type of policy you wish to use')
 parser.add_argument('--trailing_n', type=int, default=10, help='Window size of plotting win %')
 parser.add_argument('--n_episodes', type=int, default=10000, help='Number of episodes agent interacts with env')
-parser.add_argument('--alpha', type=float, default=0.001, help='Learning rate')
+parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
 parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
 parser.add_argument('--epsilon_init', type=float, default=1.0, help='Initial epsilon value')
 parser.add_argument('--epsilon_min', type=float, default=0.01, help='Minimum epsilon value to decay to')
@@ -35,12 +35,12 @@ class Policies:
             self.agent = TabularAgent(np.arange(env.observation_space.n),
                                        np.arange(env.action_space.n),
                                        args.epsilon_init, args.epsilon_min, args.epsilon_desc,
-                                       args.gamma, args.alpha, args.n_episodes)
+                                       args.gamma, args.lr, args.n_episodes)
         elif policy == 'naive neural':
             self.agent = NaiveNeuralAgent(np.arange(env.observation_space.n),
                                        np.arange(env.action_space.n),
                                        args.epsilon_init, args.epsilon_min, args.epsilon_desc,
-                                       args.gamma, args.alpha, args.n_episodes,
+                                       args.gamma, args.lr, args.n_episodes,
                                        policy=policy, state_dim=64, action_dim=64, hidden_dim=128)
 
     def __call__(self, state):

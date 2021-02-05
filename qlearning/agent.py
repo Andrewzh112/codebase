@@ -8,7 +8,7 @@ from qlearning.experience_replay import ReplayBuffer
 
 
 class BaseAgent:
-    def __init__(self, state_dim, n_actions, epsilon_init, epsilon_min, epsilon_desc, gamma, alpha, n_episodes):
+    def __init__(self, state_dim, n_actions, epsilon_init, epsilon_min, epsilon_desc, gamma, lr, n_episodes):
         self.actions = list(range(n_actions))
         self.n_actions = n_actions
         if isinstance(state_dim, int):
@@ -18,7 +18,7 @@ class BaseAgent:
         self.epsilon_min = epsilon_min
         self.epsilon_desc = epsilon_desc
         self.gamma = gamma
-        self.alpha = alpha
+        self.lr = lr
         self.n_episodes = n_episodes
 
     def epsilon_greedy(self, state):
@@ -31,8 +31,8 @@ class BaseAgent:
 
 
 class TabularAgent(BaseAgent):
-    def __init__(self, states, actions, epsilon_init, epsilon_min, epsilon_desc, gamma, alpha, n_episodes):
-        super().__init__(states, actions, epsilon_init, epsilon_min, epsilon_desc, gamma, alpha, n_episodes)
+    def __init__(self, states, actions, epsilon_init, epsilon_min, epsilon_desc, gamma, lr, n_episodes):
+        super().__init__(states, actions, epsilon_init, epsilon_min, epsilon_desc, gamma, lr, n_episodes)
         # initialize table with 0 Q-values
         self.q_table = pd.DataFrame(np.zeros((self.state_dim, self.n_actions)),
                                     index=states, columns=actions)
@@ -45,7 +45,7 @@ class TabularAgent(BaseAgent):
         # update Q-table
         max_Q_ = self.q_table.loc[next_state].max()
         Q_sa = self.q_table.loc[state, action]
-        self.q_table.loc[state, action] += self.alpha * (
+        self.q_table.loc[state, action] += self.lr * (
             reward + self.gamma * max_Q_ - Q_sa)
         # update epsilon
         self.decrease_epsilon()
@@ -66,7 +66,7 @@ class NaiveNeuralAgent(BaseAgent):
                 kwargs['action_dim'],
                 kwargs['hidden_dim'],
                 self.n_actions).to(self.device)
-        self.optimizer = optim.Adam(self.Q_function.parameters(), self.alpha)
+        self.optimizer = optim.Adam(self.Q_function.parameters(), self.lr)
         self.criterion = torch.nn.MSELoss()
 
     def number2tensor(self, number):
@@ -99,6 +99,9 @@ class DQNAgent(BaseAgent):
         self.batch_size = kwargs['batch_size']
         self.grad_clip = kwargs['grad_clip']
         self.prioritize = kwargs['prioritize']
+        self.alpha = kwargs['alpha']
+        self.beta = kwargs['beta']
+        self.eps = kwargs['eps']
         self.memory = ReplayBuffer(kwargs['max_size'], self.state_dim)
         self.target_update_interval = kwargs['target_update_interval']
         self.n_updates = 0
@@ -126,8 +129,8 @@ class DQNAgent(BaseAgent):
         self.freeze_network(self.target_Q)
         self.target_Q.name = kwargs['algorithm'] + '_' + kwargs['env_name'] + '_target'
 
-        self.optimizer = torch.optim.RMSprop(self.Q_function.parameters(), lr=self.alpha, alpha=0.95)
-        self.criterion = torch.nn.MSELoss()
+        self.optimizer = torch.optim.RMSprop(self.Q_function.parameters(), lr=self.lr, alpha=0.95)
+        self.criterion = torch.nn.MSELoss(reduction='none')
 
     def greedy_action(self, observation):
         observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
@@ -145,22 +148,33 @@ class DQNAgent(BaseAgent):
             p.requires_grad = False
 
     def update(self):
-        # Q_t = Q_t + alpha * (reward + gamma * Q'_t - Q^target_t) ** 2
+        # Q_t = Q_t + lr * (reward + gamma * Q'_t - Q^target_t) ** 2
         # keep sampling until we have full batch
         if self.memory.ctr < self.batch_size:
             return
         self.optimizer.zero_grad()
-        observations, rewards, actions, next_observations, dones = self.sample_transitions()
+        observations, rewards, actions, next_observations, dones, idx, weights = self.sample_transitions()
 
-        # double DQN use online network to select action for target
+        # double DQN uses online network to select action for Q'
         if self.algorithm.endswith('DDQN'):
             next_actions = self.Q_function(next_observations).argmax(-1)
             q_prime = self.target_Q(next_observations)[list(range(self.batch_size)), next_actions]
         elif self.algorithm.endswith('DQN'):
             q_prime = self.target_Q(next_observations).max(-1)[0]
-        q_target = rewards.to(self.device) + self.gamma * q_prime * (~dones)
+
+        # calculate target + estimate
+        q_target = rewards + self.gamma * q_prime * (~dones)
         q_pred = self.Q_function(observations)[list(range(self.batch_size)), actions]
-        loss = self.criterion(q_target, q_pred)
+        loss = self.criterion(q_target.detach(), q_pred)
+
+        # for updating priorities if using priority replay
+        if self.prioritize:
+            priorities = (idx, loss.clone().detach() + self.eps)
+        else:
+            priorities = None
+
+        # update
+        loss = (loss * weights).mean()
         loss.backward()
         if self.grad_clip is not None:
             torch.nn.utils.clip_grad_norm_(self.Q_function.parameters(), self.grad_clip)
@@ -169,13 +183,6 @@ class DQNAgent(BaseAgent):
         self.n_updates += 1
         if self.n_updates % self.target_update_interval == 0:
             self.update_target_network()
-
-        priorities = None
-        # if self.prioritize:
-        #     # TODO
-        #     pass
-        # else:
-        #     priorities = None
         return priorities
 
     def decrease_epsilon(self):
