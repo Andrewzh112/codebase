@@ -114,7 +114,8 @@ class DQNAgent(BaseAgent):
                     kwargs['cpt_dir'],
                     kwargs['algorithm'] + '_' + kwargs['env_name'],
                     kwargs['img_size'],
-                    kwargs['hidden_dim']).to(self.device)
+                    kwargs['hidden_dim'],
+                    noised=kwargs['noised']).to(self.device)
         else:
             self.Q_function = QBasic(
                     kwargs['input_channels'],
@@ -122,7 +123,8 @@ class DQNAgent(BaseAgent):
                     kwargs['cpt_dir'],
                     kwargs['algorithm'] + '_' + kwargs['env_name'],
                     kwargs['img_size'],
-                    kwargs['hidden_dim']).to(self.device)
+                    kwargs['hidden_dim'],
+                    noised=kwargs['noised']).to(self.device)
 
         # instanciate target network
         self.target_Q = deepcopy(self.Q_function)
@@ -148,10 +150,11 @@ class DQNAgent(BaseAgent):
             p.requires_grad = False
 
     def update(self):
-        # Q_t = Q_t + lr * (reward + gamma * Q'_t - Q^target_t) ** 2
         # keep sampling until we have full batch
         if self.memory.ctr < self.batch_size:
             return
+
+        # Q_t = Q_t + lr * (reward + gamma * Q'_t - Q^target_t) ** 2
         self.optimizer.zero_grad()
         observations, rewards, actions, next_observations, dones, idx, weights = self.sample_transitions()
 

@@ -5,7 +5,7 @@ import argparse
 from collections import deque
 from pathlib import Path
 from gym import wrappers
-# from ple.games.flappybird import FlappyBird
+import gym_ple
 
 from qlearning.agent import DQNAgent
 from qlearning.atari.utils import processed_atari
@@ -23,7 +23,8 @@ parser.add_argument('--env_name', type=str, default='PongNoFrameskip-v4', help='
                                                                                 SpaceInvadersNoFrameskip-v4\n \
                                                                                 EnduroNoFrameskip-v4\n \
                                                                                 AtlantisNoFrameskip-v4\n \
-                                                                                BankHeistNoFrameskip-v4')
+                                                                                BankHeistNoFrameskip-v4\n \
+                                                                                FlappyBird-v0')
 parser.add_argument('--n_repeats', type=int, default=4, help='The number of repeated actions')
 parser.add_argument('--img_size', type=int, default=84, help='The height and width of images after resizing')
 parser.add_argument('--input_channels', type=int, default=1, help='The input channels after preprocessing')
@@ -44,6 +45,7 @@ parser.add_argument('--no_prioritize', action="store_true", default=False, help=
 parser.add_argument('--alpha', type=float, default=0.6, help='Prioritized Experience Replay alpha')
 parser.add_argument('--beta', type=float, default=0.4, help='Prioritized Experience Replay beta')
 parser.add_argument('--eps', type=float, default=1e-5, help='Prioritized Experience Replay epsilon')
+parser.add_argument('--noised', action="store_true", default=False, help='Using noisy networks')
 
 # logging
 parser.add_argument('--progress_window', type=int, default=100, help='Window of episodes for progress')
@@ -71,41 +73,45 @@ if __name__ == '__main__':
         env = wrappers.Monitor(env, args.video_dir,
                                video_callable=lambda episode_id: True,
                                force=True)
-    if 'DQN' in args.algorithm:
-        agent = DQNAgent(env.observation_space.shape,
-                         env.action_space.n,
-                         args.epsilon_init, args.epsilon_min, args.epsilon_desc,
-                         args.gamma, args.lr, args.n_episodes,
-                         input_channels=args.input_channels,
-                         algorithm=args.algorithm,
-                         img_size=args.img_size,
-                         hidden_dim=args.hidden_dim,
-                         max_size=args.max_size,
-                         target_update_interval=args.target_update_interval,
-                         batch_size=args.batch_size,
-                         cpt_dir=args.cpt_dir,
-                         grad_clip=args.grad_clip,
-                         prioritize=not args.no_prioritize,
-                         alpha=args.alpha,
-                         beta=args.beta,
-                         eps=args.eps,
-                         env_name=args.env_name)
-    else:
-        raise NotImplementedError
-    # force some parameters depending on if using priority replay
+
+    # force some parameters depending on if using priority replay, following paper protocols
     if args.no_prioritize:
         args.alpha, args.beta, args.epsilon = 1, 0, 0
     else:
         args.lr /= 4
-    scores, best_score = deque(maxlen=args.progress_window), -np.inf
 
-    # load weights & make sure model in eval mode during test
+    # no need for exploration if using noisy networks
+    if args.noised:
+        args.epsilon_init, args.epsilon_min = 0, 0
+
+    agent = DQNAgent(env.observation_space.shape,
+                        env.action_space.n,
+                        args.epsilon_init, args.epsilon_min, args.epsilon_desc,
+                        args.gamma, args.lr, args.n_episodes,
+                        input_channels=args.input_channels,
+                        algorithm=args.algorithm,
+                        img_size=args.img_size,
+                        hidden_dim=args.hidden_dim,
+                        max_size=args.max_size,
+                        target_update_interval=args.target_update_interval,
+                        batch_size=args.batch_size,
+                        cpt_dir=args.cpt_dir,
+                        grad_clip=args.grad_clip,
+                        prioritize=not args.no_prioritize,
+                        alpha=args.alpha,
+                        beta=args.beta,
+                        eps=args.eps,
+                        noised=args.noised,
+                        env_name=args.env_name)
+
+    # load weights & make sure model in eval mode during test, only need online network for testings
     if args.test:
         agent.load_models()
         agent.Q_function.eval()
+
+    scores, best_score = deque(maxlen=args.progress_window), -np.inf
     pbar = tqdm(range(args.n_episodes))
     for e in pbar:
-
         # reset every episode and make sure functions are in training mode
         done, score, observation = False, 0, env.reset()
         agent.Q_function.train()
@@ -128,8 +134,9 @@ if __name__ == '__main__':
         # logging
         writer.add_scalars('Performance and training', {'Score': score, 'Epsilon': agent.epsilon})
         scores.append(score)
-        if score > best_score and not args.test:
+        avg_score = np.mean(scores)
+        if avg_score > best_score and not args.test:
             agent.save_models()
-            best_score = score
+            best_score = avg_score
         if (e + 1) % args.print_every == 0:
-            tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, Average Score: {np.mean(scores)}, Best Score {best_score}, Epsilon: {agent.epsilon}')
+            tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, Average Score: {avg_score}, Best Score {best_score}, Epsilon: {agent.epsilon}')

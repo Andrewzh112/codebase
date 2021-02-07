@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torch.nn import functional as F
 import torch
+import math
 import os
 
 
@@ -19,7 +20,7 @@ class QNaive(nn.Module):
 class QBasic(nn.Module):
     def __init__(self, input_channels, n_actions, cpt_dir, name,
                  img_size=84, hidden_dim=512, n_repeats=4, channels=[32, 64, 64],
-                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1]):
+                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1], noised=False):
         super().__init__()
         q_network = []
         # CNN layers
@@ -35,9 +36,12 @@ class QBasic(nn.Module):
         fc_size = nn.Sequential(*q_network)(dummy_img).size(-1)
 
         # FC layers
-        q_network.append(nn.Linear(fc_size, hidden_dim))
-        q_network.append(nn.ReLU())
-        q_network.append(nn.Linear(hidden_dim, n_actions))
+        if noised:
+            q_network.extend(
+                [NoisedLinear(fc_size, hidden_dim), nn.ReLU(), NoisedLinear(hidden_dim, n_actions)])
+        else:
+            q_network.extend(
+                [nn.Linear(fc_size, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, n_actions)])
         self.q_network = nn.Sequential(*q_network)
 
         # training
@@ -58,7 +62,7 @@ class QBasic(nn.Module):
 class QDueling(nn.Module):
     def __init__(self, input_channels, n_actions, cpt_dir, name,
                  img_size=84, hidden_dim=512, n_repeats=4, channels=[32, 64, 64],
-                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1]):
+                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1], noised=False):
         super().__init__()
         feature_extractor = []
         # CNN layers
@@ -74,13 +78,20 @@ class QDueling(nn.Module):
         fc_size = nn.Sequential(*feature_extractor)(dummy_img).size(-1)
 
         # FC layers
-        feature_extractor.append(nn.Linear(fc_size, hidden_dim))
+        if noised:
+            feature_extractor.append(NoisedLinear(fc_size, hidden_dim))
+        else:
+            feature_extractor.append(nn.Linear(fc_size, hidden_dim))
         feature_extractor.append(nn.ReLU())
         self.feature_extractor = nn.Sequential(*feature_extractor)
 
         # value & advantage fns
-        self.value = nn.Linear(hidden_dim, 1)
-        self.advantage = nn.Linear(hidden_dim, n_actions)
+        if noised:
+            self.value = NoisedLinear(hidden_dim, 1)
+            self.advantage = NoisedLinear(hidden_dim, n_actions)
+        else:
+            self.value = nn.Linear(hidden_dim, 1)
+            self.advantage = nn.Linear(hidden_dim, n_actions)
 
         # training
         self.name = name
@@ -99,3 +110,49 @@ class QDueling(nn.Module):
 
     def load_checkpoint(self):
         self.load_state_dict(torch.load(self.cpt + '.pth'))
+
+
+class NoisedMatrix(nn.Module):
+    def __init__(self, in_features, out_features, sigma_init=0.017):
+        super().__init__()
+        self.matrix_mu = nn.Parameter(torch.randn(in_features, out_features))
+        self.matrix_sigma = nn.Parameter(torch.randn(in_features, out_features))
+        self.matrix_epsilon = torch.empty(in_features, out_features)
+
+        # initialization scheme
+        self.sigma_init = sigma_init
+        init_range = math.sqrt(3 / in_features)
+        self.init_weights(init_range)
+
+    def combine_parameters(self):
+        self.reset_epsilon()
+        return self.matrix_mu + self.matrix_sigma * self.matrix_epsilon
+
+    def reset_epsilon(self):
+        self.matrix_epsilon.normal_(0, 1)
+        self.matrix_epsilon = self.matrix_epsilon.to(self.matrix_mu.device)
+
+    def init_weights(self, init_range):
+        self.matrix_mu.data = torch.nn.init.uniform_(
+            self.matrix_mu.data, a=-init_range, b=init_range)
+        self.matrix_sigma.data = torch.ones_like(self.matrix_sigma.data) * self.sigma_init
+
+    def forward(self):
+        pass
+
+
+class NoisedLinear(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.weight = NoisedMatrix(in_features, out_features)
+        self.bias = NoisedMatrix(out_features, 1)
+
+    def forward(self, state):
+        if self.training:
+            weight = self.weight.combine_parameters()
+            bias = self.bias.combine_parameters().squeeze()
+        else:
+            weight = self.weight.matrix_mu
+            bias = self.bias.matrix_mu.squeeze()
+        Qs = state @ weight + bias
+        return Qs
