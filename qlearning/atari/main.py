@@ -25,16 +25,17 @@ parser.add_argument('--env_name', type=str, default='PongNoFrameskip-v4', help='
                                                                                 AtlantisNoFrameskip-v4\n \
                                                                                 BankHeistNoFrameskip-v4\n \
                                                                                 FlappyBird-v0')
-parser.add_argument('--n_repeats', type=int, default=4, help='The number of repeated actions')
+parser.add_argument('--n_repeats', type=int, default=4, help='Frames stack size')
+parser.add_argument('--action_repeats', type=int, default=4, help='The number of repeated actions')
 parser.add_argument('--img_size', type=int, default=84, help='The height and width of images after resizing')
 parser.add_argument('--input_channels', type=int, default=1, help='The input channels after preprocessing')
 parser.add_argument('--hidden_dim', type=int, default=512, help='The hidden size for second fc layer')
-parser.add_argument('--max_size', type=int, default=100000, help='Buffer size')
-parser.add_argument('--target_update_interval', type=int, default=1000, help='Interval for updating target network')
+parser.add_argument('--max_size', type=int, default=300000, help='Buffer size')
 
 # training
 parser.add_argument('-e', '--n_episodes', '--epochs', type=int, default=1000, help='Number of episodes agent interacts with env')
 parser.add_argument('--lr', type=float, default=0.00025, help='Learning rate')
+parser.add_argument('--target_update_interval', type=int, default=1000, help='Interval for updating target network')
 parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
 parser.add_argument('--epsilon_init', type=float, default=1.0, help='Initial epsilon value')
 parser.add_argument('--epsilon_min', type=float, default=0.1, help='Minimum epsilon value to decay to')
@@ -43,9 +44,12 @@ parser.add_argument('--grad_clip', type=float, default=10, help='Norm of the gra
 parser.add_argument('-b', '--batch_size', type=int, default=32, help='Batch size')
 parser.add_argument('--no_prioritize', action="store_true", default=False, help='Use Prioritized Experience Replay')
 parser.add_argument('--alpha', type=float, default=0.6, help='Prioritized Experience Replay alpha')
-parser.add_argument('--beta', type=float, default=0.4, help='Prioritized Experience Replay beta')
+parser.add_argument('--beta_init', type=float, default=0.4, help='Initial beta value')
+parser.add_argument('--beta_min', type=float, default=1.0, help='Maximum beta value to grow to')
+parser.add_argument('--beta_dec', type=float, default=1e-5, help='Beta increase')
 parser.add_argument('--eps', type=float, default=1e-5, help='Prioritized Experience Replay epsilon')
 parser.add_argument('--noised', action="store_true", default=False, help='Using noisy networks')
+parser.add_argument('--num_atoms', type=int, default=51, help='Number of atoms used for Categorical DQN')
 
 # logging
 parser.add_argument('--progress_window', type=int, default=100, help='Window of episodes for progress')
@@ -65,7 +69,7 @@ Path(args.cpt_dir).mkdir(parents=True, exist_ok=True)
 
 
 if __name__ == '__main__':
-    env = processed_atari(args.env_name, args.img_size, args.input_channels, args.n_repeats)
+    env = processed_atari(args.env_name, args.img_size, args.input_channels, args.n_repeats, args.action_repeats)
 
     # if testing agent and want to output videos, make dir & wrap env to auto output video files 
     if args.test and args.video:
@@ -76,7 +80,7 @@ if __name__ == '__main__':
 
     # force some parameters depending on if using priority replay, following paper protocols
     if args.no_prioritize:
-        args.alpha, args.beta, args.epsilon = 1, 0, 0
+        args.alpha, args.beta_init, args.epsilon = 1, 0, 0
     else:
         args.lr /= 4
 
@@ -99,9 +103,13 @@ if __name__ == '__main__':
                         grad_clip=args.grad_clip,
                         prioritize=not args.no_prioritize,
                         alpha=args.alpha,
-                        beta=args.beta,
+                        beta=args.beta_init,
+                        beta_min=args.beta_min,
+                        beta_dec=args.beta_dec,
                         eps=args.eps,
                         noised=args.noised,
+                        n_repeats=args.n_repeats,
+                        num_atoms=args.num_atoms,
                         env_name=args.env_name)
 
     # load weights & make sure model in eval mode during test, only need online network for testings
@@ -109,7 +117,7 @@ if __name__ == '__main__':
         agent.load_models()
         agent.Q_function.eval()
 
-    scores, best_score = deque(maxlen=args.progress_window), -np.inf
+    scores, best_score, best_avg = deque(maxlen=args.progress_window), -np.inf, -np.inf
     pbar = tqdm(range(args.n_episodes))
     for e in pbar:
         # reset every episode and make sure functions are in training mode
@@ -135,8 +143,10 @@ if __name__ == '__main__':
         writer.add_scalars('Performance and training', {'Score': score, 'Epsilon': agent.epsilon})
         scores.append(score)
         avg_score = np.mean(scores)
-        if avg_score > best_score and not args.test:
+        if avg_score > best_avg and not args.test:
             agent.save_models()
-            best_score = avg_score
+            best_avg = avg_score
+        if score > best_score:
+            best_score = score
         if (e + 1) % args.print_every == 0:
-            tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, Average Score: {avg_score}, Best Score {best_score}, Epsilon: {agent.epsilon}')
+            tqdm.write(f'Episode: {e + 1}/{args.n_episodes}, Average Score: {avg_score}, Best Score {best_score}, Epsilon: {agent.epsilon}, Beta: {agent.beta}')

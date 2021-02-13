@@ -3,7 +3,8 @@ import numpy as np
 import torch
 from torch import optim
 from copy import deepcopy
-from qlearning.networks import QNaive, QBasic, QDueling
+from qlearning import networks
+from qlearning.networks import QNaive
 from qlearning.experience_replay import ReplayBuffer
 
 
@@ -95,48 +96,40 @@ class NaiveNeuralAgent(BaseAgent):
 class DQNAgent(BaseAgent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args)
-        self.algorithm = kwargs['algorithm']
-        self.batch_size = kwargs['batch_size']
-        self.grad_clip = kwargs['grad_clip']
-        self.prioritize = kwargs['prioritize']
-        self.alpha = kwargs['alpha']
-        self.beta = kwargs['beta']
-        self.eps = kwargs['eps']
-        self.memory = ReplayBuffer(kwargs['max_size'], self.state_dim)
-        self.target_update_interval = kwargs['target_update_interval']
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        self.memory = ReplayBuffer(self.max_size, self.state_dim)
         self.n_updates = 0
-
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        if self.algorithm.startswith('Dueling'):
-            self.Q_function = QDueling(
-                    kwargs['input_channels'],
-                    self.n_actions,
-                    kwargs['cpt_dir'],
-                    kwargs['algorithm'] + '_' + kwargs['env_name'],
-                    kwargs['img_size'],
-                    kwargs['hidden_dim'],
-                    noised=kwargs['noised']).to(self.device)
-        else:
-            self.Q_function = QBasic(
-                    kwargs['input_channels'],
-                    self.n_actions,
-                    kwargs['cpt_dir'],
-                    kwargs['algorithm'] + '_' + kwargs['env_name'],
-                    kwargs['img_size'],
-                    kwargs['hidden_dim'],
-                    noised=kwargs['noised']).to(self.device)
+
+        network = self.algorithm
+        if 'DD' in network:
+            import re
+            network = re.sub('DDQN', 'DQN', network)
+        network = getattr(networks, network)
+        self.Q_function = network(
+                input_channels=self.input_channels,
+                out_features=self.n_actions,
+                cpt_dir=self.cpt_dir,
+                name=self.algorithm + '_' + self.env_name,
+                img_size=self.img_size,
+                hidden_dim=self.hidden_dim,
+                n_repeats=self.n_repeats,
+                noised=self.noised,
+                num_atoms=self.num_atoms).to(self.device)
 
         # instanciate target network
         self.target_Q = deepcopy(self.Q_function)
         self.freeze_network(self.target_Q)
-        self.target_Q.name = kwargs['algorithm'] + '_' + kwargs['env_name'] + '_target'
+        self.target_Q.name = self.algorithm + '_' + self.env_name + '_target'
 
         self.optimizer = torch.optim.RMSprop(self.Q_function.parameters(), lr=self.lr, alpha=0.95)
         self.criterion = torch.nn.MSELoss(reduction='none')
 
     def greedy_action(self, observation):
-        observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
-        next_action = self.Q_function(observation).argmax()
+        with torch.no_grad():
+            observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
+            next_action = self.Q_function(observation).argmax()
         return next_action.item()
 
     def update_target_network(self):
@@ -161,18 +154,18 @@ class DQNAgent(BaseAgent):
         # double DQN uses online network to select action for Q'
         if self.algorithm.endswith('DDQN'):
             next_actions = self.Q_function(next_observations).argmax(-1)
-            q_prime = self.target_Q(next_observations)[list(range(self.batch_size)), next_actions]
+            q_prime = self.target_Q(next_observations).gather(1, next_actions.unsqueeze(1))
         elif self.algorithm.endswith('DQN'):
             q_prime = self.target_Q(next_observations).max(-1)[0]
 
         # calculate target + estimate
-        q_target = rewards + self.gamma * q_prime * (~dones)
-        q_pred = self.Q_function(observations)[list(range(self.batch_size)), actions]
-        loss = self.criterion(q_target.detach(), q_pred)
+        q_target = rewards + self.gamma * q_prime.squeeze() * (~dones)
+        q_pred = self.Q_function(observations).gather(1, actions.unsqueeze(1))
+        loss = self.criterion(q_target.detach(), q_pred.squeeze())
 
         # for updating priorities if using priority replay
         if self.prioritize:
-            priorities = (idx, loss.clone().detach() + self.eps)
+            priorities = (idx, loss.detach().cpu() + self.eps)
         else:
             priorities = None
 
@@ -182,13 +175,16 @@ class DQNAgent(BaseAgent):
         if self.grad_clip is not None:
             torch.nn.utils.clip_grad_norm_(self.Q_function.parameters(), self.grad_clip)
         self.optimizer.step()
-        self.decrease_epsilon()
+        self.adjust_epsilon_and_beta()
         self.n_updates += 1
         if self.n_updates % self.target_update_interval == 0:
             self.update_target_network()
         return priorities
 
-    def decrease_epsilon(self):
+    def adjust_epsilon_and_beta(self):
+        self.beta = min(
+            self.beta_min,
+            self.beta + self.beta_dec)
         self.epsilon = max(
             self.epsilon_min,
             self.epsilon - self.epsilon_desc)
@@ -198,7 +194,8 @@ class DQNAgent(BaseAgent):
         self.memory.store(state, reward, action, next_state, done, priority=priority)
 
     def sample_transitions(self):
-        return self.memory.sample(self.batch_size, self.device)
+        transition = self.memory.sample(self.batch_size, self.device, self.beta)
+        return transition
 
     def save_models(self):
         self.target_Q.check_point()

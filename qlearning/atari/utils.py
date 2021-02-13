@@ -84,9 +84,9 @@ class FrameStacker(gym.ObservationWrapper):
         self.stack.append(observation)
         return np.array(self.stack).reshape(self.observation_shape)
 
-def processed_atari(env_name, shape=84, input_channels=1, n_repeats=4, clip_rewards=False, no_ops=0, fire_first=False):
+def processed_atari(env_name, shape=84, input_channels=1, n_repeats=4, action_repeats=4, clip_rewards=False, no_ops=0, fire_first=False):
     env = gym.make(env_name)
-    env = RepeatAction(env, n_repeats, clip_rewards, no_ops, fire_first)
+    env = RepeatAction(env, action_repeats, clip_rewards, no_ops, fire_first)
     env = Preprocess(env, (shape, shape, input_channels))
     env = FrameStacker(env, n_repeats)
     return env

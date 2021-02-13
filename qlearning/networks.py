@@ -17,31 +17,34 @@ class QNaive(nn.Module):
         return self.fc(state_emd)
 
 
-class QBasic(nn.Module):
-    def __init__(self, input_channels, n_actions, cpt_dir, name,
+class DQN(nn.Module):
+    def __init__(self, input_channels, out_features, cpt_dir, name,
                  img_size=84, hidden_dim=512, n_repeats=4, channels=[32, 64, 64],
-                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1], noised=False):
+                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1], noised=False, **kwargs):
         super().__init__()
-        q_network = []
+        feature_extractor = []
         # CNN layers
         prev_ch = input_channels * n_repeats
         for ch, ks, sd in zip(channels, kernel_sizes, strides):
-            q_network.append(nn.Conv2d(prev_ch, ch, kernel_size=ks, stride=sd))
-            q_network.append(nn.ReLU())
+            feature_extractor.append(nn.Conv2d(prev_ch, ch, kernel_size=ks, stride=sd))
+            feature_extractor.append(nn.ReLU())
             prev_ch = ch
-        q_network.append(nn.Flatten())
+        feature_extractor.append(nn.Flatten())
+
+        self.feature_extractor = nn.Sequential(*feature_extractor)
+        q_network = [self.feature_extractor]
 
         # find the feature dimension after CNN and flatten
         dummy_img = torch.empty(1, input_channels * n_repeats, img_size, img_size)
-        fc_size = nn.Sequential(*q_network)(dummy_img).size(-1)
+        self.fc_size = self.feature_extractor(dummy_img).size(-1)
 
         # FC layers
         if noised:
             q_network.extend(
-                [NoisedLinear(fc_size, hidden_dim), nn.ReLU(), NoisedLinear(hidden_dim, n_actions)])
+                [NoisedLinear(self.fc_size, hidden_dim), nn.ReLU(), NoisedLinear(hidden_dim, out_features)])
         else:
             q_network.extend(
-                [nn.Linear(fc_size, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, n_actions)])
+                [nn.Linear(self.fc_size, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, out_features)])
         self.q_network = nn.Sequential(*q_network)
 
         # training
@@ -59,10 +62,10 @@ class QBasic(nn.Module):
         self.load_state_dict(torch.load(self.cpt + '.pth'))
 
 
-class QDueling(nn.Module):
-    def __init__(self, input_channels, n_actions, cpt_dir, name,
+class DuelingDQN(nn.Module):
+    def __init__(self, input_channels, out_features, cpt_dir, name,
                  img_size=84, hidden_dim=512, n_repeats=4, channels=[32, 64, 64],
-                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1], noised=False):
+                 kernel_sizes=[8, 4, 3], strides=[4, 2, 1], noised=False, **kwargs):
         super().__init__()
         feature_extractor = []
         # CNN layers
@@ -88,14 +91,13 @@ class QDueling(nn.Module):
         # value & advantage fns
         if noised:
             self.value = NoisedLinear(hidden_dim, 1)
-            self.advantage = NoisedLinear(hidden_dim, n_actions)
+            self.advantage = NoisedLinear(hidden_dim, out_features)
         else:
             self.value = nn.Linear(hidden_dim, 1)
-            self.advantage = nn.Linear(hidden_dim, n_actions)
+            self.advantage = nn.Linear(hidden_dim, out_features)
 
         # training
         self.name = name
-        self.n_actions = n_actions
         self.cpt = os.path.join(cpt_dir, name)
 
     def forward(self, observations):
@@ -124,7 +126,7 @@ class NoisedMatrix(nn.Module):
         init_range = math.sqrt(3 / in_features)
         self.init_weights(init_range)
 
-    def combine_parameters(self):
+    def assemble_parameters(self):
         self.reset_epsilon()
         return self.matrix_mu + self.matrix_sigma * self.matrix_epsilon
 
@@ -149,10 +151,30 @@ class NoisedLinear(nn.Module):
 
     def forward(self, state):
         if self.training:
-            weight = self.weight.combine_parameters()
-            bias = self.bias.combine_parameters().squeeze()
+            weight = self.weight.assemble_parameters()
+            bias = self.bias.assemble_parameters().squeeze()
         else:
             weight = self.weight.matrix_mu
             bias = self.bias.matrix_mu.squeeze()
         Qs = state @ weight + bias
         return Qs
+
+class CategoricalDQN(DQN):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        categorical_network = [self.feature_extractor]
+        if self.noised:
+            linear_layer = NoisedLinear
+        else:
+            linear_layer = nn.Linear
+        categorical_network.extend(
+            [linear_layer(self.fc_size, self.hidden_dim),
+             nn.ReLU(),
+             linear_layer(self.hidden_dim, self.n_actions * self.num_atoms)])
+        self.categorical_network = nn.Sequential(*categorical_network)
+
+    def forward(self, state):
+        logits = self.categorical_network(state).view(-1, self.num_atoms)
+        return torch.softmax(logits, dim=-1).view(-1, self.n_actions, self.num_atoms)
