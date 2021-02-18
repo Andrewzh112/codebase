@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+from policy.networks import ActorCritic
 
 
 class BlackJackAgent:
@@ -122,3 +124,75 @@ class CartPoleNoob:
 
     def decrease_eps(self):
         self.epsilon = max(0.01, self.epsilon - 1e-5)
+
+
+class PolicyGradientAgent:
+    def __init__(self, input_dim, action_dim, hidden_dim, gamma, lr):
+        self.gamma = gamma
+        self.policy = ActorCritic(*input_dim, action_dim, hidden_dim)
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.reward_history, self.action_logprob_history = [], []
+
+    def choose_action(self, state):
+        state = torch.from_numpy(state).to(self.device)
+        action_proba = torch.softmax(self.policy(state), dim=-1)
+        action_dist = torch.distributions.Categorical(action_proba)
+        action = action_dist.sample()
+        if self.policy.training:
+            log_probas = action_dist.log_prob(action)
+            self.action_logprob_history.append(log_probas)
+        return action.item()
+
+    def store_reward(self, reward):
+        self.reward_history.append(reward)
+
+    def update(self):
+        # calculate MC returns & loss
+        T = len(self.reward_history)
+        discounts = torch.logspace(0, T, steps=T + 1, base=self.gamma, device=self.device)[:T]
+        returns = torch.tensor([torch.tensor(
+            self.reward_history[t:], dtype=torch.float, device=self.device) @ discounts[t:] for t in range(T)])
+        loss = 0
+        for g, log_prob in zip(returns, self.action_logprob_history):
+            loss += - g * log_prob
+
+        # sgd + reset history
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        self.reward_history, self.action_logprob_history = [], []
+
+
+class ActorCriticAgent:
+    def __init__(self, input_dim, action_dim, hidden_dim, gamma, lr):
+        self.gamma = gamma
+        self.actor_critic = ActorCritic(*input_dim, action_dim, hidden_dim)
+        self.optimizer = torch.optim.Adam(self.actor_critic.parameters(), lr)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.log_proba, self.value = None, None
+
+
+    def choose_action(self, state):
+        state = torch.from_numpy(state).to(self.device)
+        self.value, action_logits = self.actor_critic(state)
+        action_proba = torch.softmax(action_logits, dim=-1)
+        action_dist = torch.distributions.Categorical(action_proba)
+        action = action_dist.sample()
+        self.log_proba = action_dist.log_prob(action)
+        return action.item()
+
+    def update(self, reward, state_, done):
+        # calculate TD loss
+        state_ = torch.from_numpy(state_).unsqueeze(0).to(self.device)
+        value_, _ = self.actor_critic(state_)
+        critic_loss = (reward + self.gamma * value_ * ~done - self.value).pow(2)
+
+        # actor loss
+        actor_loss = - self.value.detach() * self.log_proba
+
+        # sgd + reset history
+        loss = critic_loss + actor_loss
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
