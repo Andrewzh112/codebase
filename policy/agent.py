@@ -272,7 +272,6 @@ class DDPGAgent:
         with torch.no_grad():
             mu = self.actor(observation)
         action = mu + self.noise()
-        print(mu, action)
         self.actor.train()
         action = action.cpu().detach().numpy()
         # clip noised action to ensure not out of bounds
