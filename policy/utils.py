@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import torch
 
@@ -14,8 +13,7 @@ class OUActionNoise:
         self.reset()
 
     def __call__(self):
-        x = self.x_prev + self.theta * (self.mu - self.x_prev) * \
-            self.dt + self.sigma + math.sqrt(self.dt) * torch.randn(*self.mu.shape, device=self.device)
+        x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + self.sigma * np.sqrt(self.dt) * torch.randn(size=self.mu.shape)
         self.x_prev = x
         return x
 

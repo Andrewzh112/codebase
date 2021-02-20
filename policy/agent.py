@@ -1,8 +1,9 @@
 import numpy as np
 import torch
 from copy import deepcopy
+
 from policy.networks import ActorCritic, Actor, Critic
-from policy.utils import ReplayBuffer, OUActionNoise
+from policy.utils import ReplayBuffer, OUActionNoise, clip_action
 
 
 class BlackJackAgent:
@@ -208,6 +209,7 @@ class DDPGAgent:
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
+        self.max_action = max_action
         self.memory = ReplayBuffer(state_dim, action_dim, maxsize)
         self.noise = OUActionNoise(torch.zeros(action_dim, device=self.device),
                                    sigma=sigma,
@@ -270,8 +272,11 @@ class DDPGAgent:
         with torch.no_grad():
             mu = self.actor(observation)
         action = mu + self.noise()
+        print(mu, action)
         self.actor.train()
-        return action.cpu().detach().numpy()
+        action = action.cpu().detach().numpy()
+        # clip noised action to ensure not out of bounds
+        return clip_action(action, self.max_action)
 
     def store_transition(self, state, action, reward, next_state, done):
         state = torch.tensor(state)

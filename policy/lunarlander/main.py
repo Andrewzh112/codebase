@@ -7,7 +7,6 @@ from collections import deque
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 
-from policy.utils import clip_action
 from policy import agent as Agent
 
 
@@ -90,9 +89,6 @@ def main():
                 env.render()
 
             action = agent.choose_action(observation)
-            # clip noised action to ensure not out of bounds
-            if args.agent in ['DDPG']:
-                action = clip_action(action, max_action)
             next_observation, reward, done, _ = env.step(action)
             score += reward
 
@@ -131,8 +127,8 @@ def main():
                     global_step=e)
             actor_losses, critic_losses = [], []
 
-            if score > best_score:
-                best_score = score
+            if np.mean(score_history) > best_score:
+                best_score = np.mean(score_history)
                 agent.save_models()
         tqdm.write(
             f'Episode: {e + 1}/{args.n_episodes}, Score: {score}, Average Score: {np.mean(score_history)}')
