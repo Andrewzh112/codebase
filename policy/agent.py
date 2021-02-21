@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.nn import functional as F
 from copy import deepcopy
 
 from policy.networks import ActorCritic, Actor, Critic
@@ -219,35 +220,43 @@ class DDPGAgent:
                              final_init, checkpoint, 'Critic')
         self.actor = Actor(*state_dim, *action_dim, hidden_dims, max_action,
                            actor_lr, actor_wd, final_init, checkpoint, 'Actor')
-        self.target_critic = deepcopy(self.critic)
+        self.target_critic = self.get_target_network(self.critic)
         self.target_critic.name = 'Target_Critic'
-        self.target_actor = deepcopy(self.actor)
+        self.target_actor = self.get_target_network(self.actor)
         self.target_actor.name = 'Target_Actor'
+    
+    def get_target_network(self, online_network, freeze_weights=True):
+        target_network = deepcopy(online_network)
+        if freeze_weights:
+            for param in target_network.parameters():
+                param.requires_grad = False
+        return target_network
 
     def update(self):
         experiences = self.memory.sample_transition(self.batch_size)
         states, actions, rewards, next_states, dones = [data.to(self.device) for data in experiences]
-        # calculate targets & only update online critic network
-        with torch.no_grad():
-            next_actions = self.target_actor(next_states)
-            q_primes = self.target_critic(next_states, next_actions)
-            targets = rewards + self.gamma * q_primes * (~dones)
-        qs = self.critic(states, actions)
-        td_error = targets - qs
-        critic_loss = td_error.pow(2).mean()
-        self.critic.optimizer.zero_grad()
-        critic_loss.backward()
-        self.critic.optimizer.step()
 
         # actor loss is by maximizing Q values
+        self.actor.optimizer.zero_grad()
         qs = self.critic(states, self.actor(states))
         actor_loss = - qs.mean()
-        self.actor.optimizer.zero_grad()
         actor_loss.backward()
         self.actor.optimizer.step()
 
+        # calculate targets & only update online critic network
+        self.critic.optimizer.zero_grad()
+        with torch.no_grad():
+            target_actions = self.target_actor(next_states)
+            q_primes = self.target_critic(next_states, target_actions).squeeze()
+            targets = rewards + self.gamma * q_primes * (~dones)
+        qs = self.critic(states, actions)
+        critic_loss = F.mse_loss(targets.unsqueeze(-1), qs)
+        critic_loss.backward()
+        self.critic.optimizer.step()
+
         self.update_target_network(self.critic, self.target_critic)
         self.update_target_network(self.actor, self.target_actor)
+
         return actor_loss.item(), critic_loss.item()
 
     def update_target_network(self, src, tgt):

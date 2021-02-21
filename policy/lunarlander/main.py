@@ -32,6 +32,8 @@ parser.add_argument('--dt', type=float, default=1e-2, help='dt for UOnoise')
 # eval params
 parser.add_argument('--render', action="store_true", default=False, help='Render environment while training')
 parser.add_argument('--window_legnth', type=int, default=100, help='Length of window to keep track scores')
+parser.add_argument('--test', action="store_true", default=False, help='Whether to test environment')
+parser.add_argument('--load_models', action="store_true", default=False, help='Load pretrained models')
 
 # checkpoint + logs
 parser.add_argument('--checkpoint', type=str, default='policy/lunarlander/checkpoint', help='Checkpoint for model weights')
@@ -43,6 +45,9 @@ def main():
     env_type = 'Continuous' if args.agent in ['DDPG'] else ''
     env = gym.make(f'LunarLander{env_type}-v2')
     agent_ = getattr(Agent, args.agent.replace(' ', '') + 'Agent')
+    if args.test:
+        args.load_models = True
+        args.render = True
     if args.agent in ['DDPG']:
         max_action = float(env.action_space.high[0])
         agent = agent_(state_dim=env.observation_space.shape,
@@ -74,6 +79,8 @@ def main():
 
     writer = SummaryWriter(args.logdir)
 
+    if args.load_models:
+        agent.load_models()
     pbar = tqdm(range(args.n_episodes))
     score_history = deque(maxlen=args.window_legnth)
     best_score = env.reward_range[0]
