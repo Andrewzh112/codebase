@@ -10,9 +10,10 @@ from torch.utils.tensorboard import SummaryWriter
 from policy import agent as Agent
 
 
-parser = argparse.ArgumentParser(description='Lunar Lander Agents')
+parser = argparse.ArgumentParser(description='Continuous Environment Agents')
 # training hyperparams
 parser.add_argument('--agent', type=str, default='TD3', help='Agent Algorithm')
+parser.add_argument('--environment', type=str, default='LunarLanderContinuous-v2', help='Agent Algorithm')
 parser.add_argument('--n_episodes', type=int, default=3000, help='Number of episodes you wish to run for')
 parser.add_argument('--batch_size', type=int, default=100, help='Minibatch size')
 parser.add_argument('--hidden_dim', type=int, default=2048, help='Hidden dimension of FC layers')
@@ -28,6 +29,7 @@ parser.add_argument('--maxsize', type=int, default=1e6, help='Size of Replay Buf
 parser.add_argument('--sigma', type=float, default=0.1, help='Sigma for Noise')
 parser.add_argument('--theta', type=float, default=0.15, help='Theta for UOnoise')
 parser.add_argument('--dt', type=float, default=1e-2, help='dt for UOnoise')
+parser.add_argument('--warmup_steps', type=int, default=10000, help='Warmup steps to take random actions before updating')
 parser.add_argument('--actor_update_iter', type=int, default=2, help='Update actor and target network every')
 parser.add_argument('--action_sigma', type=float, default=0.2, help='Std of noise for actions')
 parser.add_argument('--action_clip', type=float, default=0.5, help='Max action bound')
@@ -45,8 +47,7 @@ args = parser.parse_args()
 
 
 def main():
-    env_type = 'Continuous' if args.agent in ['DDPG', 'TD3'] else ''
-    env = gym.make(f'LunarLander{env_type}-v2')
+    env = gym.make(args.environment)
     agent_ = getattr(Agent, args.agent.replace(' ', '') + 'Agent')
     if args.test:
         args.load_models = True
@@ -135,7 +136,7 @@ def main():
             elif args.agent in ['DDPG', 'TD3']:
                 agent.store_transition(observation, action, reward, next_observation, done)
                 # if we have memory smaller than batch size, do not update
-                if agent.memory.idx < args.batch_size or (args.agent == 'TD3' and agent.ctr < 10000):
+                if agent.memory.idx < args.batch_size or (args.agent == 'TD3' and agent.ctr < args.warmup_steps):
                     continue
                 actor_loss, critic_loss = agent.update()
                 actor_losses.append(actor_loss)
