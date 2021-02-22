@@ -21,6 +21,21 @@ class OUActionNoise:
         self.x_prev = self.x0 if self.x0 is not None else torch.zeros_like(self.mu)
 
 
+class GaussianActionNoise:
+    def __init__(self, mu, sigma=0.2):
+        self.mu = mu
+        self.sigma = sigma
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+    def __call__(self, output_dim, clip=None, sigma=None):
+        if sigma is None:
+            sigma = self.sigma
+        noise = torch.randn(*output_dim) * sigma + self.mu
+        if clip is not None:
+            noise.clip(-clip, clip)
+        return noise
+
+
 class ReplayBuffer:
     def __init__(self, state_dim, action_dim, maxsize):
         self.states = torch.empty(maxsize, *state_dim)

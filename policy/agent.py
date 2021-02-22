@@ -4,7 +4,7 @@ from torch.nn import functional as F
 from copy import deepcopy
 
 from policy.networks import ActorCritic, Actor, Critic
-from policy.utils import ReplayBuffer, OUActionNoise, clip_action
+from policy.utils import ReplayBuffer, OUActionNoise, clip_action, GaussianActionNoise
 
 
 class BlackJackAgent:
@@ -211,6 +211,15 @@ class DDPGAgent:
         self.tau = tau
         self.batch_size = batch_size
         self.max_action = max_action
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.hidden_dims = hidden_dims
+        self.critic_lr = critic_lr
+        self.critic_wd = critic_wd
+        self.final_init = final_init
+        self.checkpoint = checkpoint
+        self.sigma = sigma
+
         self.memory = ReplayBuffer(state_dim, action_dim, maxsize)
         self.noise = OUActionNoise(torch.zeros(action_dim, device=self.device),
                                    sigma=sigma,
@@ -272,15 +281,18 @@ class DDPGAgent:
     def load_models(self):
         self.critic.load_checkpoint()
         self.actor.load_checkpoint()
-        self.target_critic.save_checkpoint()
-        self.target_actor.save_checkpoint()
+        self.target_critic.load_checkpoint()
+        self.target_actor.load_checkpoint()
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, test):
         self.actor.eval()
         observation = torch.from_numpy(observation).to(self.device)
         with torch.no_grad():
             mu = self.actor(observation)
-        action = mu + self.noise()
+        if test:
+            action = mu
+        else:
+            action = mu + self.noise()
         self.actor.train()
         action = action.cpu().detach().numpy()
         # clip noised action to ensure not out of bounds
@@ -293,3 +305,74 @@ class DDPGAgent:
         next_state = torch.tensor(next_state)
         done = torch.tensor(done, dtype=torch.bool)
         self.memory.store_transition(state, action, reward, next_state, done)
+
+
+class TD3Agent(DDPGAgent):
+    def __init__(self, *args, **kwargs):
+        exluded_kwargs = ['actor_update_iter', 'action_sigma', 'action_clip']
+        super().__init__(*args, **{k: v for k, v in kwargs.items() if k not in exluded_kwargs})
+        self.ctr = 0
+        self.actor_update_iter = kwargs['actor_update_iter']
+        self.action_sigma = kwargs['action_sigma']
+        self.action_clip = kwargs['action_clip']
+        self.noise = GaussianActionNoise(mu=0, sigma=self.sigma)
+        self.actor_loss = 0
+
+        # second pair of critic
+        self.critic2 = Critic(*self.state_dim, *self.action_dim, self.hidden_dims,
+                              self.critic_lr, self.critic_wd,
+                              self.final_init, self.checkpoint, 'Critic2')
+        self.target_critic2 = self.get_target_network(self.critic2)
+        self.target_critic2.name = 'Target_Critic2'
+
+    def choose_action(self, observation, test):
+        self.actor.eval()
+        self.ctr += 1
+        observation = torch.from_numpy(observation).to(self.device)
+        with torch.no_grad():
+            action = self.actor(observation)
+        if not test:
+            action = action + self.noise(action.size())
+        self.actor.train()
+        action = action.cpu().detach().numpy()
+        # clip noised action to ensure not out of bounds
+        return clip_action(action, self.max_action)
+
+    def update(self):
+        experiences = self.memory.sample_transition(self.batch_size)
+        states, actions, rewards, next_states, dones = [data.to(self.device) for data in experiences]
+
+        # actor loss is by maximizing Q values
+        if self.ctr % self.actor_update_iter == 0:
+            self.actor.optimizer.zero_grad()
+            qs = self.critic(states, self.actor(states))
+            actor_loss = - qs.mean()
+            actor_loss.backward()
+            self.actor.optimizer.step()
+            self.actor_loss = actor_loss.item()
+
+            self.update_target_network(self.critic, self.target_critic)
+            self.update_target_network(self.critic2, self.target_critic2)
+            self.update_target_network(self.actor, self.target_actor)
+
+        # calculate targets & only update online critic network
+        self.critic.optimizer.zero_grad()
+        with torch.no_grad():
+            # y <- r + gamma * min_(i=1,2) Q_(theta'_i)(s', a_telda)
+            target_actions = self.target_actor(next_states)
+            target_actions += self.noise(
+                target_actions.size(), clip=self.action_clip, sigma=self.action_sigma)
+            target_actions = clip_action(target_actions, self.max_action)
+            q_primes1 = self.target_critic(next_states, target_actions).squeeze()
+            q_primes2 = self.target_critic2(next_states, target_actions).squeeze()
+            q_primes = torch.min(q_primes1, q_primes2)
+            targets = rewards + self.gamma * q_primes * (~dones)
+        # theta_i <- argmin_(theta_i) N^(-1) sum(y - Q_(theta_i)(s, a))^2
+        qs1 = self.critic(states, actions)
+        qs2 = self.critic2(states, actions)
+        critic_loss1 = F.mse_loss(targets.unsqueeze(-1), qs1)
+        critic_loss2 = F.mse_loss(targets.unsqueeze(-1), qs2)
+        critic_loss = critic_loss1 + critic_loss2
+        critic_loss.backward()
+        self.critic.optimizer.step()
+        return self.actor_loss, critic_loss.item()
