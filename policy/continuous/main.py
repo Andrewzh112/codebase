@@ -12,10 +12,10 @@ from policy import agent as Agent
 
 parser = argparse.ArgumentParser(description='Continuous Environment Agents')
 # training hyperparams
-parser.add_argument('--agent', type=str, default='TD3', help='Agent Algorithm')
+parser.add_argument('--agent', type=str, default='SAC', help='Agent Algorithm')
 parser.add_argument('--environment', type=str, default='LunarLanderContinuous-v2', help='Agent Algorithm')
 parser.add_argument('--n_episodes', type=int, default=3000, help='Number of episodes you wish to run for')
-parser.add_argument('--batch_size', type=int, default=100, help='Minibatch size')
+parser.add_argument('--batch_size', type=int, default=256, help='Minibatch size')
 parser.add_argument('--hidden_dim', type=int, default=2048, help='Hidden dimension of FC layers')
 parser.add_argument('--hidden_dims', type=list, default=[400, 300], help='Hidden dimensions of FC layers')
 parser.add_argument('--critic_lr', type=float, default=1e-3, help='Learning rate for Critic')
@@ -33,6 +33,7 @@ parser.add_argument('--warmup_steps', type=int, default=10000, help='Warmup step
 parser.add_argument('--actor_update_iter', type=int, default=2, help='Update actor and target network every')
 parser.add_argument('--action_sigma', type=float, default=0.2, help='Std of noise for actions')
 parser.add_argument('--action_clip', type=float, default=0.5, help='Max action bound')
+parser.add_argument('--reward_scale', type=float, default=2., help='Reward scale for Soft Actor-Critic')
 
 # eval params
 parser.add_argument('--render', action="store_true", default=False, help='Render environment while training')
@@ -95,6 +96,20 @@ def main():
                        action_sigma=args.action_sigma,
                        action_clip=args.action_clip
                        )
+    elif args.agent == 'SAC':
+        max_action = float(env.action_space.high[0])
+        agent = agent_(state_dim=env.observation_space.shape,
+                       action_dim=env.action_space.shape,
+                       hidden_dims=args.hidden_dims,
+                       max_action=max_action,
+                       gamma=args.gamma,
+                       tau=args.tau,
+                       reward_scale=2,
+                       lr=args.critic_lr,
+                       batch_size=args.batch_size,
+                       maxsize=int(args.maxsize),
+                       checkpoint=args.checkpoint,
+                       )
     else:
         agent = agent_(state_dim=env.observation_space.shape,
                        actionaction_dim_dim=env.action_space.n,
@@ -116,13 +131,15 @@ def main():
         done, score, observation = False, 0, env.reset()
 
         # reset DDPG UO Noise and also keep track of actor/critic losses
-        if args.agent in ['DDPG', 'TD3']:
+        if args.agent in ['DDPG', 'TD3', 'SAC']:
             if args.agent == 'DDPG':
                 agent.noise.reset()
             actor_losses, critic_losses = [], []
+        if args.agent == 'SAC':
+            value_losses = []
         while not done:
             if args.render:
-                env.render()
+                env.render(mode='human')
 
             action = agent.choose_action(observation, args.test)
             next_observation, reward, done, _ = env.step(action)
@@ -133,15 +150,23 @@ def main():
                 continue
             elif args.agent == 'Actor Critic':
                 agent.update(reward, next_observation, done)
-            elif args.agent in ['DDPG', 'TD3']:
+            elif args.agent in ['DDPG', 'TD3', 'SAC']:
                 agent.store_transition(observation, action, reward, next_observation, done)
                 # if we have memory smaller than batch size, do not update
                 if agent.memory.idx < args.batch_size or (args.agent == 'TD3' and agent.ctr < args.warmup_steps):
                     continue
-                actor_loss, critic_loss = agent.update()
+                if args.agent == 'SAC':
+                    value_loss, critic_loss, actor_loss = agent.update()
+                    value_losses.append(value_loss)
+                else:
+                    actor_loss, critic_loss = agent.update()
                 actor_losses.append(actor_loss)
                 critic_losses.append(critic_loss)
-                pbar.set_postfix({'Reward': reward, 'Actor Loss': actor_loss, 'Critic Loss': critic_loss})
+                if args.agent == 'SAC':
+                    pbar.set_postfix({'Reward': reward, 'Actor Loss': actor_loss,
+                                      'Critic Loss': critic_loss, 'Value Loss': value_loss})
+                else:
+                    pbar.set_postfix({'Reward': reward, 'Actor Loss': actor_loss, 'Critic Loss': critic_loss})
             else:
                 agent.store_reward(reward)
             observation = next_observation
@@ -155,15 +180,20 @@ def main():
             agent.update()
 
         # logging & saving
-        elif args.agent in ['DDPG', 'TD3']:
+        elif args.agent in ['DDPG', 'TD3', 'SAC']:
             writer.add_scalars(
                 'Scores',
                 {'Episodic': score, 'Windowed Average': np.mean(score_history)},
                 global_step=e)
+
             if actor_losses:
+                loss_dict = {'Actor': np.mean(actor_losses), 'Critic': np.mean(critic_losses)}
+                if args.agent == 'SAC':
+                    loss_dict['Value'] = np.mean(value_losses)
+                    value_losses = []
                 writer.add_scalars(
                     'Losses',
-                    {'Actor': np.mean(actor_losses), 'Critic': np.mean(critic_losses)},
+                    loss_dict,
                     global_step=e)
             actor_losses, critic_losses = [], []
 

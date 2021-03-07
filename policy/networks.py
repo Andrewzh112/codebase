@@ -1,6 +1,7 @@
 import math
 import torch
 from torch import nn
+from torch.distributions.multivariate_normal import MultivariateNormal
 
 
 class ActorCritic(nn.Module):
@@ -106,6 +107,107 @@ class Actor(nn.Module):
         state_features = self.state_encoder(states)
         # bound the output action to [-max_action, max_action]
         return torch.tanh(self.mu(state_features)) * self.max_action
+
+    def save_checkpoint(self):
+        torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')
+
+    def load_checkpoint(self):
+        self.load_state_dict(torch.load(self.checkpoint_path + '/' + self.name + '.pth'))
+
+
+class SACCritic(nn.Module):
+    def __init__(self, state_dim, action_dim, hidden_dims, lr,
+                checkpoint_path, name):
+        super().__init__()
+        self.checkpoint_path = checkpoint_path
+        self.name = name
+        encoder = []
+        prev_dim = state_dim + action_dim
+        for i, dim in enumerate(hidden_dims):
+            encoder.extend([
+                nn.Linear(prev_dim, dim),
+                nn.LayerNorm(dim)
+            ])
+            if i < len(hidden_dims) - 1:
+                encoder.append(nn.ReLU(True))
+            prev_dim = dim
+        self.encoder = nn.Sequential(*encoder)
+        self.value = nn.Linear(prev_dim, 1)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, states, actions):
+        scores = self.encoder(torch.cat([states, actions], dim=1))
+        return self.value(scores)
+
+    def save_checkpoint(self):
+        torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')
+
+    def load_checkpoint(self):
+        self.load_state_dict(torch.load(self.checkpoint_path + '/' + self.name + '.pth'))
+
+
+class SACValue(SACCritic):
+    def __init__(self, state_dim, hidden_dims, lr,
+                 checkpoint_path, name):
+        super().__init__(state_dim, 0, hidden_dims, lr,
+                         checkpoint_path, name)
+
+    def forward(self, states):
+        scores = self.encoder(states)
+        return self.value(scores)
+
+
+class SACActor(nn.Module):
+    def __init__(self, state_dim, action_dim,
+                 hidden_dims, lr, max_action,
+                 checkpoint_path, name):
+        super().__init__()
+        self.log_std_min = -20
+        self.log_std_max = 2
+        self.epsilon = 1e-6
+        self.checkpoint_path = checkpoint_path
+        self.name = name
+        self.max_action = max_action
+        encoder = []
+        prev_dim = state_dim
+        for i, dim in enumerate(hidden_dims):
+            encoder.extend([
+                nn.Linear(prev_dim, dim),
+                nn.LayerNorm(dim)
+            ])
+            if i < len(hidden_dims) - 1:
+                encoder.append(nn.ReLU(True))
+            prev_dim = dim
+        self.encoder = nn.Sequential(*encoder)
+
+        # mu & logvar for action
+        self.actor = nn.Linear(prev_dim, action_dim * 2)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def sample(self, mu, log_std, reparameterize=True):
+        if mu.dim() == 1:
+            mu = mu.unsqueeze(0)
+        distribution = MultivariateNormal(mu, scale_tril=torch.diag_embed(log_std.exp()))
+        if reparameterize:
+            actions = distribution.rsample()
+        else:
+            actions = distribution.sample()
+        log_probs = distribution.log_prob(actions)
+        bounded_actions = torch.tanh(actions) * self.max_action
+        bounded_log_probs = log_probs - torch.log(
+            (1 - bounded_actions.pow(2)).clamp(0, 1) + self.epsilon).sum(dim=1)
+        return bounded_actions.squeeze(), bounded_log_probs
+
+    def forward(self, states, reparameterize=True):
+        scores = self.encoder(states)
+        mu, log_std = self.actor(scores).split(2, dim=-1)
+        log_std = log_std.clamp(self.log_std_min, self.log_std_max)
+        action, log_prob = self.sample(mu, log_std, reparameterize=reparameterize)
+        return action, log_prob
 
     def save_checkpoint(self):
         torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')

@@ -3,9 +3,9 @@ import torch
 from torch.nn import functional as F
 from copy import deepcopy
 
-from policy.networks import ActorCritic, Actor, Critic
+from policy.networks import ActorCritic, Actor, Critic, SACActor, SACCritic, SACValue
 from policy.utils import ReplayBuffer, OUActionNoise, clip_action, GaussianActionNoise
-
+torch.autograd.set_detect_anomaly(True)
 
 class BlackJackAgent:
     def __init__(self, method, env, function='V', gamma=0.99, epsilon=0.1):
@@ -332,7 +332,7 @@ class TD3Agent(DDPGAgent):
         with torch.no_grad():
             action = self.actor(observation)
         if not test:
-            action = action + self.noise(action.size())
+            action = action + self.noise(action.size()).to(self.device)
         self.actor.train()
         action = action.cpu().detach().numpy()
         # clip noised action to ensure not out of bounds
@@ -357,12 +357,14 @@ class TD3Agent(DDPGAgent):
 
         # calculate targets & only update online critic network
         self.critic.optimizer.zero_grad()
+        self.critic2.optimizer.zero_grad()
         with torch.no_grad():
             # y <- r + gamma * min_(i=1,2) Q_(theta'_i)(s', a_telda)
             target_actions = self.target_actor(next_states)
             target_actions += self.noise(
-                target_actions.size(), clip=self.action_clip, sigma=self.action_sigma)
-            target_actions = clip_action(target_actions, self.max_action)
+                target_actions.size(), clip=self.action_clip, sigma=self.action_sigma).to(self.device)
+            target_actions = clip_action(target_actions.cpu().numpy(), self.max_action)
+            target_actions = torch.from_numpy(target_actions).to(self.device)
             q_primes1 = self.target_critic(next_states, target_actions).squeeze()
             q_primes2 = self.target_critic2(next_states, target_actions).squeeze()
             q_primes = torch.min(q_primes1, q_primes2)
@@ -375,4 +377,117 @@ class TD3Agent(DDPGAgent):
         critic_loss = critic_loss1 + critic_loss2
         critic_loss.backward()
         self.critic.optimizer.step()
+        self.critic2.optimizer.step()
         return self.actor_loss, critic_loss.item()
+
+
+class SACAgent:
+    def __init__(self, state_dim, action_dim, hidden_dims, max_action, gamma, 
+                 tau, reward_scale, lr, batch_size, maxsize, checkpoint):
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.gamma = gamma
+        self.tau = tau
+        self.reward_scale = reward_scale
+        self.batch_size = batch_size
+
+        self.memory = ReplayBuffer(state_dim, action_dim, maxsize)
+        self.critic1 = SACCritic(*state_dim, *action_dim, hidden_dims, lr,
+                                 checkpoint, 'Critic')
+        self.critic2 = SACCritic(*state_dim, *action_dim, hidden_dims,
+                                 lr, checkpoint, 'Critic2')
+        self.actor = SACActor(*state_dim, *action_dim, hidden_dims, max_action,
+                              lr, checkpoint, 'Actor')
+        self.value = SACValue(*state_dim, hidden_dims,
+                              lr, checkpoint, 'Valuator')
+        self.target_value = self.get_target_network(self.value)
+        self.target_value.name = 'Target_Valuator'
+
+    def get_target_network(self, online_network, freeze_weights=True):
+        target_network = deepcopy(online_network)
+        if freeze_weights:
+            for param in target_network.parameters():
+                param.requires_grad = False
+        return target_network
+
+    def choose_action(self, observation, test):
+        self.actor.eval()
+        observation = torch.from_numpy(observation).to(self.device)
+        with torch.no_grad():
+            action, _ = self.actor(observation)
+        self.actor.train()
+        action = action.cpu().detach().numpy()
+        return action
+
+    def update(self):
+        experiences = self.memory.sample_transition(self.batch_size)
+        states, actions, rewards, next_states, dones = [data.to(self.device) for data in experiences]
+
+        ###### UPDATE VALUATOR ######
+        self.value.optimizer.zero_grad()
+        with torch.no_grad():
+            policy_actions, log_probs = self.actor(states, reparameterize=False)
+            action_values1 = self.critic1(states, policy_actions).squeeze()
+            action_values2 = self.critic2(states, policy_actions).squeeze()
+        action_values = torch.min(action_values1, action_values2)
+        target = action_values - log_probs.squeeze()
+        values = self.value(states).squeeze()
+        value_loss = 0.5 * F.mse_loss(target, values)
+        value_loss.backward()
+        self.value.optimizer.step()
+
+        ###### UPDATE CRITIC ######
+        self.critic1.optimizer.zero_grad()
+        self.critic2.optimizer.zero_grad()
+        with torch.no_grad():
+            v_hat = self.target_value(next_states).squeeze() * (~dones)
+        targets = rewards * self.reward_scale + self.gamma * v_hat
+        qs1 = self.critic1(states, actions).squeeze()
+        qs2 = self.critic2(states, actions).squeeze()
+        critic_loss1 = 0.5 * F.mse_loss(targets, qs1)
+        critic_loss2 = 0.5 * F.mse_loss(targets, qs2)
+        critic_loss = critic_loss1 + critic_loss2
+        critic_loss.backward()
+        self.critic1.optimizer.step()
+        self.critic2.optimizer.step()
+
+        ###### UPDATE ACTOR ######
+        self.actor.optimizer.zero_grad()
+        actions, log_probs = self.actor(states)
+        action_values1 = self.critic1(states, actions).squeeze()
+        action_values2 = self.critic2(states, actions).squeeze()
+        action_values = torch.min(action_values1, action_values2)
+        actor_loss = torch.mean(log_probs.squeeze() - action_values)
+        actor_loss.backward()
+        self.actor.optimizer.step()
+
+        ###### UPDATE TARGET VALUE ######
+        self.update_target_network(self.value, self.target_value)
+
+        return value_loss.item(), critic_loss.item(), actor_loss.item()
+
+    def update_target_network(self, src, tgt):
+        for src_weight, tgt_weight in zip(src.parameters(), tgt.parameters()):
+            tgt_weight.data = tgt_weight.data * self.tau + src_weight.data * (1. - self.tau)
+
+    def store_transition(self, state, action, reward, next_state, done):
+        state = torch.tensor(state)
+        action = torch.tensor(action)
+        reward = torch.tensor(reward)
+        next_state = torch.tensor(next_state)
+        done = torch.tensor(done, dtype=torch.bool)
+        self.memory.store_transition(state, action, reward, next_state, done)
+
+    def save_models(self):
+        self.critic1.save_checkpoint()
+        self.critic2.save_checkpoint()
+        self.actor.save_checkpoint()
+        self.value.save_checkpoint()
+        self.target_value.save_checkpoint()
+
+    def load_models(self):
+        self.critic1.load_checkpoint()
+        self.critic2.load_checkpoint()
+        self.actor.load_checkpoint()
+        self.value.load_checkpoint()
+        self.target_value.load_checkpoint()
+
