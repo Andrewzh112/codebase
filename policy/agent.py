@@ -3,7 +3,7 @@ import torch
 from torch.nn import functional as F
 from copy import deepcopy
 
-from policy.networks import ActorCritic, Actor, Critic, SACActor, SACCritic, SACValue
+from policy.networks import ActorCritic, Actor, Critic, SACActor, SACCritic
 from policy.utils import ReplayBuffer, OUActionNoise, clip_action, GaussianActionNoise
 torch.autograd.set_detect_anomaly(True)
 
@@ -272,17 +272,17 @@ class DDPGAgent:
         for src_weight, tgt_weight in zip(src.parameters(), tgt.parameters()):
             tgt_weight.data = tgt_weight.data * self.tau + src_weight.data * (1. - self.tau)
 
-    def save_models(self):
-        self.critic.save_checkpoint()
-        self.actor.save_checkpoint()
-        self.target_critic.save_checkpoint()
-        self.target_actor.save_checkpoint()
+    def save_models(self, agent):
+        self.critic.save_checkpoint(agent)
+        self.actor.save_checkpoint(agent)
+        self.target_critic.save_checkpoint(agent)
+        self.target_actor.save_checkpoint(agent)
 
-    def load_models(self):
-        self.critic.load_checkpoint()
-        self.actor.load_checkpoint()
-        self.target_critic.load_checkpoint()
-        self.target_actor.load_checkpoint()
+    def load_models(self, agent):
+        self.critic.load_checkpoint(agent)
+        self.actor.load_checkpoint(agent)
+        self.target_critic.load_checkpoint(agent)
+        self.target_actor.load_checkpoint(agent)
 
     def choose_action(self, observation, test):
         self.actor.eval()
@@ -383,12 +383,13 @@ class TD3Agent(DDPGAgent):
 
 class SACAgent:
     def __init__(self, state_dim, action_dim, hidden_dims, max_action, gamma, 
-                 tau, reward_scale, lr, batch_size, maxsize, checkpoint):
+                 tau, alpha, lr, batch_size, maxsize, log_std_min, log_std_max,
+                 epsilon, checkpoint):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.gamma = gamma
         self.tau = tau
-        self.reward_scale = reward_scale
         self.batch_size = batch_size
+        self.alpha = alpha
 
         self.memory = ReplayBuffer(state_dim, action_dim, maxsize)
         self.critic1 = SACCritic(*state_dim, *action_dim, hidden_dims, lr,
@@ -396,16 +397,12 @@ class SACAgent:
         self.critic2 = SACCritic(*state_dim, *action_dim, hidden_dims,
                                  lr, checkpoint, 'Critic2')
         self.actor = SACActor(*state_dim, *action_dim, hidden_dims, max_action,
-                              lr, checkpoint, 'Actor')
+                              log_std_min, log_std_max, epsilon, lr,
+                              checkpoint, 'Actor')
         self.target_critic1 = self.get_target_network(self.critic1)
         self.target_critic1.name = 'Target_Critic1'
         self.target_critic2 = self.get_target_network(self.critic2)
         self.target_critic2.name = 'Target_Critic2'
-
-        self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
-        self.alpha_optim = torch.optim.SGD([self.log_alpha], lr=0.001)
-        self.alpha = 1# self.log_alpha.exp()
-        self.target_entropy = -torch.prod(torch.Tensor([*action_dim]).to(self.device)).item()
 
     def get_target_network(self, online_network, freeze_weights=True):
         target_network = deepcopy(online_network)
@@ -432,14 +429,15 @@ class SACAgent:
         self.critic2.optimizer.zero_grad()
         with torch.no_grad():
             next_actions, next_log_probs = self.actor(next_states)
-            action_values1 = self.critic1(next_states, next_actions).squeeze()
-            action_values2 = self.critic2(next_states, next_actions).squeeze()
-            action_values = torch.min(action_values1, action_values2) - self.alpha * next_log_probs.squeeze()
-        targets = rewards + self.gamma * action_values * (~dones)
-        qs1 = self.critic1(states, actions).squeeze()
-        qs2 = self.critic2(states, actions).squeeze()
-        critic_loss1 = 0.5 * F.mse_loss(targets, qs1)
-        critic_loss2 = 0.5 * F.mse_loss(targets, qs2)
+            next_q1 = self.target_critic1(next_states, next_actions).squeeze()
+            next_q2 = self.target_critic2(next_states, next_actions).squeeze()
+            action_values = torch.min(next_q1, next_q2) - self.alpha * next_log_probs.squeeze()
+            targets = rewards + self.gamma * action_values * (~dones)
+
+        q1 = self.critic1(states, actions).squeeze()
+        q2 = self.critic2(states, actions).squeeze()
+        critic_loss1 = 0.5 * F.mse_loss(targets, q1)
+        critic_loss2 = 0.5 * F.mse_loss(targets, q2)
         critic_loss = critic_loss1 + critic_loss2
         critic_loss.backward()
         self.critic1.optimizer.step()
@@ -448,18 +446,12 @@ class SACAgent:
         ###### UPDATE ACTOR ######
         self.actor.optimizer.zero_grad()
         actions, log_probs = self.actor(states)
-        action_values1 = self.critic1(states, actions).squeeze()
-        action_values2 = self.critic2(states, actions).squeeze()
-        action_values = torch.min(action_values1, action_values2)
-        actor_loss = torch.mean(self.alpha * log_probs.squeeze() - action_values)
+        q1 = self.critic1(states, actions).squeeze()
+        q2 = self.critic2(states, actions).squeeze()
+        q = torch.min(q1, q2)
+        actor_loss = torch.mean(self.alpha * log_probs.squeeze() - q)
         actor_loss.backward()
         self.actor.optimizer.step()
-
-        # alpha_loss = -(self.log_alpha * (log_probs + self.target_entropy).detach()).mean()
-        # self.alpha_optim.zero_grad()
-        # alpha_loss.backward()
-        # self.alpha_optim.step()
-        # self.alpha = self.log_alpha.detach().exp()
 
         ###### UPDATE TARGET CRITICS ######
         self.update_target_network(self.critic1, self.target_critic1)
@@ -479,16 +471,16 @@ class SACAgent:
         done = torch.tensor(done, dtype=torch.bool)
         self.memory.store_transition(state, action, reward, next_state, done)
 
-    def save_models(self):
-        self.critic1.save_checkpoint()
-        self.critic2.save_checkpoint()
-        self.actor.save_checkpoint()
-        self.target_critic1.save_checkpoint()
-        self.target_critic2.save_checkpoint()
+    def save_models(self, agent):
+        self.critic1.save_checkpoint(agent)
+        self.critic2.save_checkpoint(agent)
+        self.actor.save_checkpoint(agent)
+        self.target_critic1.save_checkpoint(agent)
+        self.target_critic2.save_checkpoint(agent)
 
-    def load_models(self):
-        self.critic1.load_checkpoint()
-        self.critic2.load_checkpoint()
-        self.actor.load_checkpoint()
-        self.target_critic1.load_checkpoint()
-        self.target_critic2.load_checkpoint()
+    def load_models(self, agent):
+        self.critic1.load_checkpoint(agent)
+        self.critic2.load_checkpoint(agent)
+        self.actor.load_checkpoint(agent)
+        self.target_critic1.load_checkpoint(agent)
+        self.target_critic2.load_checkpoint(agent)

@@ -1,3 +1,4 @@
+import pybullet_envs
 import gym
 import argparse
 import torch
@@ -33,7 +34,10 @@ parser.add_argument('--warmup_steps', type=int, default=10000, help='Warmup step
 parser.add_argument('--actor_update_iter', type=int, default=2, help='Update actor and target network every')
 parser.add_argument('--action_sigma', type=float, default=0.2, help='Std of noise for actions')
 parser.add_argument('--action_clip', type=float, default=0.5, help='Max action bound')
-parser.add_argument('--reward_scale', type=float, default=2., help='Reward scale for Soft Actor-Critic')
+parser.add_argument('--alpha', type=float, default=0.2, help='Entropy coeff for Soft Actor-Critic')
+parser.add_argument('--log_std_min', type=float, default=-20, help='Min log std for Soft Actor')
+parser.add_argument('--log_std_max', type=float, default=2, help='Max log std for Soft Actor')
+parser.add_argument('--epsilon', type=float, default=1e-6, help='Prevent div(0)')
 
 # eval params
 parser.add_argument('--render', action="store_true", default=False, help='Render environment while training')
@@ -104,12 +108,16 @@ def main():
                        max_action=max_action,
                        gamma=args.gamma,
                        tau=args.tau,
-                       reward_scale=2,
+                       alpha=args.alpha,
                        lr=args.critic_lr,
                        batch_size=args.batch_size,
                        maxsize=int(args.maxsize),
+                       log_std_min=args.log_std_min,
+                       log_std_max=args.log_std_max,
+                       epsilon=args.epsilon,
                        checkpoint=args.checkpoint,
                        )
+
     else:
         agent = agent_(state_dim=env.observation_space.shape,
                        actionaction_dim_dim=env.action_space.n,
@@ -123,7 +131,7 @@ def main():
     writer = SummaryWriter(args.logdir)
 
     if args.load_models:
-        agent.load_models()
+        agent.load_models(args.agent + '_' + args.environment)
     pbar = tqdm(range(args.n_episodes))
     score_history = deque(maxlen=args.window_legnth)
     best_score = - np.inf
@@ -187,7 +195,7 @@ def main():
 
             if np.mean(score_history) > best_score:
                 best_score = np.mean(score_history)
-                agent.save_models()
+                agent.save_models(args.agent + '_' + args.environment)
 
         tqdm.write(
             f'Episode: {e + 1}/{args.n_episodes}, Score: {score}, Average Score: {np.mean(score_history)}')

@@ -2,7 +2,8 @@ import math
 import numpy as np
 import torch
 from torch import nn
-from torch.distributions.multivariate_normal import MultivariateNormal
+# from torch.distributions.multivariate_normal import MultivariateNormal
+from torch.nn import functional as F
 from torch.distributions.normal import Normal
 
 
@@ -65,11 +66,11 @@ class Critic(nn.Module):
         state_action_values = nn.functional.relu(torch.add(state_values, action_values))
         return self.q(state_action_values)
 
-    def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')
+    def save_checkpoint(self, info):
+        torch.save(self.state_dict(), self.checkpoint_path + '/' + info + '_' + self.name + '.pth')
 
-    def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_path + '/' + self.name + '.pth'))
+    def load_checkpoint(self, info):
+        self.load_state_dict(torch.load(self.checkpoint_path + '/' + info + '_' + self.name + '.pth'))
 
 
 class Actor(nn.Module):
@@ -110,11 +111,11 @@ class Actor(nn.Module):
         # bound the output action to [-max_action, max_action]
         return torch.tanh(self.mu(state_features)) * self.max_action
 
-    def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')
+    def save_checkpoint(self, info):
+        torch.save(self.state_dict(), self.checkpoint_path + '/' + info + '_' + self.name + '.pth')
 
-    def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_path + '/' + self.name + '.pth'))
+    def load_checkpoint(self, info):
+        self.load_state_dict(torch.load(self.checkpoint_path + '/' + info + '_' + self.name + '.pth'))
 
 
 class SACCritic(nn.Module):
@@ -143,32 +144,21 @@ class SACCritic(nn.Module):
         scores = self.encoder(torch.cat([states, actions], dim=1))
         return self.value(scores)
 
-    def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')
+    def save_checkpoint(self, info):
+        torch.save(self.state_dict(), self.checkpoint_path + '/' + info + '_' + self.name + '.pth')
 
-    def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_path + '/' + self.name + '.pth'))
-
-
-class SACValue(SACCritic):
-    def __init__(self, state_dim, hidden_dims, lr,
-                 checkpoint_path, name):
-        super().__init__(state_dim, 0, hidden_dims, lr,
-                         checkpoint_path, name)
-
-    def forward(self, states):
-        scores = self.encoder(states)
-        return self.value(scores)
+    def load_checkpoint(self, info):
+        self.load_state_dict(torch.load(self.checkpoint_path + '/' + info + '_' + self.name + '.pth'))
 
 
 class SACActor(nn.Module):
     def __init__(self, state_dim, action_dim,
-                 hidden_dims, lr, max_action,
-                 checkpoint_path, name):
+                 hidden_dims, log_std_min, log_std_max, epsilon,
+                 lr, max_action, checkpoint_path, name):
         super().__init__()
-        self.log_std_min = -20
-        self.log_std_max = 2
-        self.epsilon = 1e-6
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
+        self.epsilon = epsilon
         self.checkpoint_path = checkpoint_path
         self.name = name
         self.max_action = max_action
@@ -196,25 +186,27 @@ class SACActor(nn.Module):
     def sample(self, mu, log_std):
         if mu.dim() == 1:
             mu = mu.unsqueeze(0)
-        distribution = MultivariateNormal(mu, covariance_matrix=torch.diag_embed(log_std.exp()))
-        # distribution = Normal(mu, log_std.exp())
+        # distribution = MultivariateNormal(mu, covariance_matrix=torch.diag_embed(log_std.exp()))
+        distribution = Normal(mu, log_std.exp())
         actions = distribution.rsample()
-        log_probs = distribution.log_prob(actions)
+        log_probs = distribution.log_prob(actions).sum(-1)
         normalized_actions = torch.tanh(actions)
         bounded_actions = normalized_actions * self.max_action
-        bounded_log_probs = log_probs - torch.log(self.max_action * \
-            (1 - normalized_actions.pow(2)) + self.epsilon).sum(dim=1)
+        bounded_log_probs = log_probs - (2 * (
+            np.log(2) - actions - F.softplus(-2 * actions))).sum(axis=1)
         return bounded_actions.squeeze(), bounded_log_probs
 
     def forward(self, states):
+        if states.dim() == 1:
+            states = states.unsqueeze(0)
         scores = self.encoder(states)
-        mu, log_std = self.actor(scores).split(2, dim=-1)
+        mu, log_std = self.actor(scores).chunk(2, dim=-1)
         log_std = log_std.clamp(self.log_std_min, self.log_std_max)
         action, log_prob = self.sample(mu, log_std)
         return action, log_prob
 
-    def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_path + '/' + self.name + '.pth')
+    def save_checkpoint(self, info):
+        torch.save(self.state_dict(), self.checkpoint_path + '/' + info + '_' + self.name + '.pth')
 
-    def load_checkpoint(self):
-        self.load_state_dict(torch.load(self.checkpoint_path + '/' + self.name + '.pth'))
+    def load_checkpoint(self, info):
+        self.load_state_dict(torch.load(self.checkpoint_path + '/' + info + '_' + self.name + '.pth'))
