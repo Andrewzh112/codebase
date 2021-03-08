@@ -135,8 +135,6 @@ def main():
             if args.agent == 'DDPG':
                 agent.noise.reset()
             actor_losses, critic_losses = [], []
-        if args.agent == 'SAC':
-            value_losses = []
         while not done:
             if args.render:
                 env.render(mode='human')
@@ -155,18 +153,11 @@ def main():
                 # if we have memory smaller than batch size, do not update
                 if agent.memory.idx < args.batch_size or (args.agent == 'TD3' and agent.ctr < args.warmup_steps):
                     continue
-                if args.agent == 'SAC':
-                    value_loss, critic_loss, actor_loss = agent.update()
-                    value_losses.append(value_loss)
                 else:
                     actor_loss, critic_loss = agent.update()
                 actor_losses.append(actor_loss)
                 critic_losses.append(critic_loss)
-                if args.agent == 'SAC':
-                    pbar.set_postfix({'Reward': reward, 'Actor Loss': actor_loss,
-                                      'Critic Loss': critic_loss, 'Value Loss': value_loss})
-                else:
-                    pbar.set_postfix({'Reward': reward, 'Actor Loss': actor_loss, 'Critic Loss': critic_loss})
+                pbar.set_postfix({'Reward': reward, 'Actor Loss': actor_loss, 'Critic Loss': critic_loss})
             else:
                 agent.store_reward(reward)
             observation = next_observation
@@ -188,9 +179,6 @@ def main():
 
             if actor_losses:
                 loss_dict = {'Actor': np.mean(actor_losses), 'Critic': np.mean(critic_losses)}
-                if args.agent == 'SAC':
-                    loss_dict['Value'] = np.mean(value_losses)
-                    value_losses = []
                 writer.add_scalars(
                     'Losses',
                     loss_dict,

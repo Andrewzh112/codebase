@@ -397,10 +397,15 @@ class SACAgent:
                                  lr, checkpoint, 'Critic2')
         self.actor = SACActor(*state_dim, *action_dim, hidden_dims, max_action,
                               lr, checkpoint, 'Actor')
-        self.value = SACValue(*state_dim, hidden_dims,
-                              lr, checkpoint, 'Valuator')
-        self.target_value = self.get_target_network(self.value)
-        self.target_value.name = 'Target_Valuator'
+        self.target_critic1 = self.get_target_network(self.critic1)
+        self.target_critic1.name = 'Target_Critic1'
+        self.target_critic2 = self.get_target_network(self.critic2)
+        self.target_critic2.name = 'Target_Critic2'
+
+        self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+        self.alpha_optim = torch.optim.SGD([self.log_alpha], lr=0.001)
+        self.alpha = 1# self.log_alpha.exp()
+        self.target_entropy = -torch.prod(torch.Tensor([*action_dim]).to(self.device)).item()
 
     def get_target_network(self, online_network, freeze_weights=True):
         target_network = deepcopy(online_network)
@@ -422,25 +427,15 @@ class SACAgent:
         experiences = self.memory.sample_transition(self.batch_size)
         states, actions, rewards, next_states, dones = [data.to(self.device) for data in experiences]
 
-        ###### UPDATE VALUATOR ######
-        self.value.optimizer.zero_grad()
-        with torch.no_grad():
-            policy_actions, log_probs = self.actor(states, reparameterize=False)
-            action_values1 = self.critic1(states, policy_actions).squeeze()
-            action_values2 = self.critic2(states, policy_actions).squeeze()
-        action_values = torch.min(action_values1, action_values2)
-        target = action_values - log_probs.squeeze()
-        values = self.value(states).squeeze()
-        value_loss = 0.5 * F.mse_loss(target, values)
-        value_loss.backward()
-        self.value.optimizer.step()
-
         ###### UPDATE CRITIC ######
         self.critic1.optimizer.zero_grad()
         self.critic2.optimizer.zero_grad()
         with torch.no_grad():
-            v_hat = self.target_value(next_states).squeeze() * (~dones)
-        targets = rewards * self.reward_scale + self.gamma * v_hat
+            next_actions, next_log_probs = self.actor(next_states)
+            action_values1 = self.critic1(next_states, next_actions).squeeze()
+            action_values2 = self.critic2(next_states, next_actions).squeeze()
+            action_values = torch.min(action_values1, action_values2) - self.alpha * next_log_probs.squeeze()
+        targets = rewards + self.gamma * action_values * (~dones)
         qs1 = self.critic1(states, actions).squeeze()
         qs2 = self.critic2(states, actions).squeeze()
         critic_loss1 = 0.5 * F.mse_loss(targets, qs1)
@@ -456,14 +451,21 @@ class SACAgent:
         action_values1 = self.critic1(states, actions).squeeze()
         action_values2 = self.critic2(states, actions).squeeze()
         action_values = torch.min(action_values1, action_values2)
-        actor_loss = torch.mean(log_probs.squeeze() - action_values)
+        actor_loss = torch.mean(self.alpha * log_probs.squeeze() - action_values)
         actor_loss.backward()
         self.actor.optimizer.step()
 
-        ###### UPDATE TARGET VALUE ######
-        self.update_target_network(self.value, self.target_value)
+        # alpha_loss = -(self.log_alpha * (log_probs + self.target_entropy).detach()).mean()
+        # self.alpha_optim.zero_grad()
+        # alpha_loss.backward()
+        # self.alpha_optim.step()
+        # self.alpha = self.log_alpha.detach().exp()
 
-        return value_loss.item(), critic_loss.item(), actor_loss.item()
+        ###### UPDATE TARGET CRITICS ######
+        self.update_target_network(self.critic1, self.target_critic1)
+        self.update_target_network(self.critic2, self.target_critic2)
+
+        return critic_loss.item(), actor_loss.item()
 
     def update_target_network(self, src, tgt):
         for src_weight, tgt_weight in zip(src.parameters(), tgt.parameters()):
@@ -481,13 +483,12 @@ class SACAgent:
         self.critic1.save_checkpoint()
         self.critic2.save_checkpoint()
         self.actor.save_checkpoint()
-        self.value.save_checkpoint()
-        self.target_value.save_checkpoint()
+        self.target_critic1.save_checkpoint()
+        self.target_critic2.save_checkpoint()
 
     def load_models(self):
         self.critic1.load_checkpoint()
         self.critic2.load_checkpoint()
         self.actor.load_checkpoint()
-        self.value.load_checkpoint()
-        self.target_value.load_checkpoint()
-
+        self.target_critic1.load_checkpoint()
+        self.target_critic2.load_checkpoint()

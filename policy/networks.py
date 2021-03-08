@@ -1,7 +1,9 @@
 import math
+import numpy as np
 import torch
 from torch import nn
 from torch.distributions.multivariate_normal import MultivariateNormal
+from torch.distributions.normal import Normal
 
 
 class ActorCritic(nn.Module):
@@ -186,27 +188,29 @@ class SACActor(nn.Module):
         self.actor = nn.Linear(prev_dim, action_dim * 2)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+        self.target_entropy = -np.prod(action_dim)
+        self.logalpha = nn.Parameter(torch.zeros(1))
         self.to(self.device)
 
-    def sample(self, mu, log_std, reparameterize=True):
+    def sample(self, mu, log_std):
         if mu.dim() == 1:
             mu = mu.unsqueeze(0)
-        distribution = MultivariateNormal(mu, scale_tril=torch.diag_embed(log_std.exp()))
-        if reparameterize:
-            actions = distribution.rsample()
-        else:
-            actions = distribution.sample()
+        distribution = MultivariateNormal(mu, covariance_matrix=torch.diag_embed(log_std.exp()))
+        # distribution = Normal(mu, log_std.exp())
+        actions = distribution.rsample()
         log_probs = distribution.log_prob(actions)
-        bounded_actions = torch.tanh(actions) * self.max_action
-        bounded_log_probs = log_probs - torch.log(
-            (1 - bounded_actions.pow(2)).clamp(0, 1) + self.epsilon).sum(dim=1)
+        normalized_actions = torch.tanh(actions)
+        bounded_actions = normalized_actions * self.max_action
+        bounded_log_probs = log_probs - torch.log(self.max_action * \
+            (1 - normalized_actions.pow(2)) + self.epsilon).sum(dim=1)
         return bounded_actions.squeeze(), bounded_log_probs
 
-    def forward(self, states, reparameterize=True):
+    def forward(self, states):
         scores = self.encoder(states)
         mu, log_std = self.actor(scores).split(2, dim=-1)
         log_std = log_std.clamp(self.log_std_min, self.log_std_max)
-        action, log_prob = self.sample(mu, log_std, reparameterize=reparameterize)
+        action, log_prob = self.sample(mu, log_std)
         return action, log_prob
 
     def save_checkpoint(self):
