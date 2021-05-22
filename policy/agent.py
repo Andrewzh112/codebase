@@ -3,9 +3,9 @@ import torch
 from torch.nn import functional as F
 from copy import deepcopy
 
-from policy.networks import ActorCritic, Actor, Critic, SACActor, SACCritic
-from policy.utils import ReplayBuffer, OUActionNoise, clip_action, GaussianActionNoise
-torch.autograd.set_detect_anomaly(True)
+from policy.networks import ActorCritic, Actor, Critic, SACActor, SACCritic, PPOActor, PPOCritic
+from policy.utils import ReplayBuffer, EpisodeBuffer, OUActionNoise, clip_action, GaussianActionNoise
+
 
 class BlackJackAgent:
     def __init__(self, method, env, function='V', gamma=0.99, epsilon=0.1):
@@ -272,17 +272,17 @@ class DDPGAgent:
         for src_weight, tgt_weight in zip(src.parameters(), tgt.parameters()):
             tgt_weight.data = tgt_weight.data * self.tau + src_weight.data * (1. - self.tau)
 
-    def save_models(self, agent):
-        self.critic.save_checkpoint(agent)
-        self.actor.save_checkpoint(agent)
-        self.target_critic.save_checkpoint(agent)
-        self.target_actor.save_checkpoint(agent)
+    def save_models(self, info):
+        self.critic.save_checkpoint(info)
+        self.actor.save_checkpoint(info)
+        self.target_critic.save_checkpoint(info)
+        self.target_actor.save_checkpoint(info)
 
-    def load_models(self, agent):
-        self.critic.load_checkpoint(agent)
-        self.actor.load_checkpoint(agent)
-        self.target_critic.load_checkpoint(agent)
-        self.target_actor.load_checkpoint(agent)
+    def load_models(self, info):
+        self.critic.load_checkpoint(info)
+        self.actor.load_checkpoint(info)
+        self.target_critic.load_checkpoint(info)
+        self.target_actor.load_checkpoint(info)
 
     def choose_action(self, observation, test):
         self.actor.eval()
@@ -471,16 +471,57 @@ class SACAgent:
         done = torch.tensor(done, dtype=torch.bool)
         self.memory.store_transition(state, action, reward, next_state, done)
 
-    def save_models(self, agent):
-        self.critic1.save_checkpoint(agent)
-        self.critic2.save_checkpoint(agent)
-        self.actor.save_checkpoint(agent)
-        self.target_critic1.save_checkpoint(agent)
-        self.target_critic2.save_checkpoint(agent)
+    def save_models(self, info):
+        self.critic1.save_checkpoint(info)
+        self.critic2.save_checkpoint(info)
+        self.actor.save_checkpoint(info)
+        self.target_critic1.save_checkpoint(info)
+        self.target_critic2.save_checkpoint(info)
 
-    def load_models(self, agent):
-        self.critic1.load_checkpoint(agent)
-        self.critic2.load_checkpoint(agent)
-        self.actor.load_checkpoint(agent)
-        self.target_critic1.load_checkpoint(agent)
-        self.target_critic2.load_checkpoint(agent)
+    def load_models(self, info):
+        self.critic1.load_checkpoint(info)
+        self.critic2.load_checkpoint(info)
+        self.actor.load_checkpoint(info)
+        self.target_critic1.load_checkpoint(info)
+        self.target_critic2.load_checkpoint(info)
+
+
+class PPOAgent:
+    def __init__(self, state_dim, action_dim, hidden_dims, max_action,
+                 log_std_min, log_std_max, epsilon, gamma, lambda_, lr, clip,
+                 batch_size, H, n_epochs, checkpoint):
+        self.gamma = gamma
+        self.clip = clip
+        self.H = H
+        self.lambda_ = lambda_
+        self.n_epochs = n_epochs
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+        self.actor = PPOActor(*state_dim, *action_dim, hidden_dims, max_action,
+                              log_std_min, log_std_max, epsilon, lr,
+                              checkpoint, 'Actor')
+        self.critic = PPOCritic(*state_dim, hidden_dims, lr,
+                                checkpoint, 'Critic')
+        self.memory = EpisodeBuffer(self.device)
+
+    def store_transition(self, states, actions, rewards, values, log_probs, dones):
+        self.memory.store_transition(states, actions, rewards, values, log_probs, dones)
+
+    def save_models(self, info):
+        self.critic.save_checkpoint(info)
+        self.actor.save_checkpoint(info)
+
+    def load_models(self, info):
+        self.critic.load_checkpoint(info)
+        self.actor.load_checkpoint(info)
+
+    def choose_action(self, state):
+        state = torch.tensor(state).to(self.device)
+        with torch.no_grad():
+            action, log_probs = self.actor(state)
+            value = self.critic(state)
+        return action.squeeze().item(), log_probs.squeeze().item(), value.squeeze().item()
+
+    def update(self):
+        for _ in range(self.n_epochs):
+            states, actions, rewards, values, log_probs, dones = self.memory.sample_batch(self.batch_size)

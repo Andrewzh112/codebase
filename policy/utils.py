@@ -66,5 +66,47 @@ class ReplayBuffer:
         return states, actions, rewards, next_states, dones
 
 
+class EpisodeBuffer:
+    def __init__(self, device):
+        self.states = []
+        self.log_probs = []
+        self.actions = []
+        self.rewards = []
+        self.values = []
+        self.dones = []
+        self.device = device
+
+    def sample_batch(self, batch_size):
+        buffer_size = len(self.states)
+
+        idx = np.random.choice(np.arange(buffer_size),
+                               size=batch_size,
+                               replace=False)
+        states = torch.stack(self.states[idx]).to(device)
+        log_probs = torch.stack(self.log_probs[idx]).to(device)
+        actions = torch.stack(self.actions[idx]).to(device)
+        rewards = torch.stack(self.rewards[idx]).to(device)
+        values = torch.stack(self.values[idx]).to(device)
+        dones = torch.stack(self.dones[idx]).to(device)
+
+        return states, actions, rewards, values, log_probs, dones
+
+    def store_transition(self, states, actions, rewards, values, log_probs, dones):
+        self.states.append(states)
+        self.log_probs.states.append(log_probs)
+        self.actions.states.append(actions)
+        self.rewards.states.append(rewards)
+        self.values.states.append(values)
+        self.dones.states.append(dones)
+
+    def clear_memory(self):
+        self.states = []
+        self.log_probs = []
+        self.actions = []
+        self.rewards = []
+        self.values = []
+        self.dones = []
+
+
 def clip_action(action, max_action):
     return np.clip(action, - max_action, max_action)

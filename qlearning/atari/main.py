@@ -5,7 +5,7 @@ import argparse
 from collections import deque
 from pathlib import Path
 from gym import wrappers
-import gym_ple
+# import gym_ple
 
 from qlearning.agent import DQNAgent
 from qlearning.atari.utils import processed_atari

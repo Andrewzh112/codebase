@@ -5,6 +5,7 @@ from torch import nn
 # from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.nn import functional as F
 from torch.distributions.normal import Normal
+from torch.distributions.categorical import Categorical
 
 
 class ActorCritic(nn.Module):
@@ -210,3 +211,21 @@ class SACActor(nn.Module):
 
     def load_checkpoint(self, info):
         self.load_state_dict(torch.load(self.checkpoint_path + '/' + info + '_' + self.name + '.pth'))
+
+
+class PPOActor(SACActor):
+    def __init__(self, state_dim, action_dim,
+                 hidden_dims, log_std_min, log_std_max, epsilon,
+                 lr, max_action, checkpoint_path, name):
+        super().__init__(state_dim, action_dim,
+                         hidden_dims, log_std_min, log_std_max, epsilon,
+                         lr, max_action, checkpoint_path, name)
+
+
+class PPOCritic(SACActor):
+    def __init__(self, state_dim, hidden_dims, lr,
+                checkpoint_path, name):
+        super().__init__(state_dim, 0, hidden_dims, lr, checkpoint_path, name)
+
+    def forward(self, states):
+        return self.value(self.encoder(states))
